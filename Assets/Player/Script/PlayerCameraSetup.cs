@@ -38,14 +38,15 @@ public class PlayerCameraSetup : NetworkBehaviour
         {
             SetupInitialCamera();
 
-            // แก้ตรงนี้: เริ่มต้นมาให้เปิดเมนูไว้ก่อน (isMenuOpen = true) 
-            // เพื่อให้ขยับตัวไม่ได้ขณะอยู่หน้า Lobby/UI
+            // Default the menu to open (isMenuOpen = true) to disable movement in Lobby/UI
             ToggleMenu(true);
         }
     }
 
     void SetupInitialCamera()
     {
+        if (playerCamera == null) return;
+
         if (gameObject.name.Contains("Monster"))
         {
             playerCamera.transform.localPosition = fpsOffset;
@@ -64,22 +65,24 @@ public class PlayerCameraSetup : NetworkBehaviour
         PlayerStateSync myState = GetComponent<PlayerStateSync>();
         bool isJUnlocked = myState != null && myState.IsCursorUnlocked;
         bool isGameMenuOpen = GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen;
+        FishMinigameManager minigameManager = GetComponent<FishMinigameManager>();
+        bool isMinigameOpen = minigameManager != null && minigameManager.IsMinigamePlaying;
 
-        // 2. ถ้าเมนูเปิดอยู่ หรือกด J ปลดเมาส์ ให้ "ล็อคทุกอย่าง" (ทั้งกล้องและการขยับ)
-        if (isMenuOpen || isJUnlocked || isGameMenuOpen) return;
+        // 2. If menu open or cursor unlocked, "lock everything" (camera & movement)
+        if (isMenuOpen || isJUnlocked || isGameMenuOpen || isMinigameOpen) return;
 
-        // 3. รันระบบกล้องปกติ
+        // 3. Run normal camera system
         HandleZoom();
         HandleCameraRotation();
 
-        // 4. สลับ Shift Lock (เฉพาะ Survivor)
+        // 4. Toggle Shift Lock (Survivor only)
         if (Input.GetKeyDown(KeyCode.LeftShift) && !gameObject.name.Contains("Monster"))
         {
             isShiftLock = !isShiftLock;
         }
     }
 
-    // ฟังก์ชันสำหรับเช็คสถานะจากสคริปต์อื่น (เช่น สคริปต์เดิน)
+    // Function to check status from other scripts (e.g., movement script)
     public bool IsMenuOpen()
     {
         return isMenuOpen;
@@ -87,7 +90,7 @@ public class PlayerCameraSetup : NetworkBehaviour
 
     void HandleZoom()
     {
-        if (gameObject.name.Contains("Monster")) return;
+        if (gameObject.name.Contains("Monster") || playerCamera == null) return;
 
         float scroll = Input.GetAxis("Mouse ScrollWheel");
         if (scroll != 0)
@@ -117,7 +120,7 @@ public class PlayerCameraSetup : NetworkBehaviour
 
             if (cameraBoom != null)
                 cameraBoom.localRotation = Quaternion.Euler(rotationX, 0, 0);
-            else
+            else if (playerCamera != null && playerCamera.transform.parent != null)
                 playerCamera.transform.parent.localRotation = Quaternion.Euler(rotationX, 0, 0);
 
             transform.rotation = Quaternion.Euler(0, rotationY, 0);

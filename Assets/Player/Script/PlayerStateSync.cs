@@ -228,10 +228,12 @@ public class PlayerStateSync : NetworkBehaviour
 
         // ใช้ LateUpdate เพื่อบังคับทับคำสั่งล็อกเมาส์ของสคริปต์เดิน/กล้อง
         // จะโชว์เมาส์ก็ต่อเมื่อ: ผู้เล่นกด J, เกมยังไม่เริ่ม (อยู่ใน Lobby), หรือเปิดหน้าเมนู ESC
-        bool isGameStarted = LobbyManager.Instance != null && LobbyManager.Instance.IsGameStarted.Value;
+        bool isGameStarted = LobbyManager.Instance == null || LobbyManager.Instance.IsGameStarted.Value;
         bool isMenuOpen = GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen;
+        FishMinigameManager minigameManager = GetComponent<FishMinigameManager>();
+        bool isMinigameOpen = minigameManager != null && minigameManager.IsMinigamePlaying;
 
-        if (isCursorUnlocked || !isGameStarted || isMenuOpen)
+        if (isCursorUnlocked || !isGameStarted || isMenuOpen || isMinigameOpen)
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;

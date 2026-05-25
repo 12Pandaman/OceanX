@@ -74,7 +74,7 @@ public class GameTimeManager : NetworkBehaviour
             return;
         }
 
-        bool isGameStarted = LobbyManager.Instance != null && LobbyManager.Instance.IsGameStarted.Value;
+        bool isGameStarted = LobbyManager.Instance == null || LobbyManager.Instance.IsGameStarted.Value;
 
         // เปิด/ปิด UI เวลาตามสถานะการเริ่มเกม (ซ่อนไว้ก่อนจนกว่า Host จะกด Start)
         if (timerTextUI != null)

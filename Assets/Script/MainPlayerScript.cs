@@ -45,7 +45,7 @@ public class MainPlayerScript : NetworkBehaviour
     [Header("Prop Hunt Settings")]
     public Transform propVisualContainer; // Container holding the prop models
     public float interactRange = 3f;
-    public float interactRadius = 0.5f; // ความกว้างของเป้าเล็ง (รัศมี) ยิ่งเยอะยิ่งเล็งโดนง่าย
+    public float interactRadius = 0.5f; // Target radius, larger makes it easier to hit
     public Vector3 propPositionOffset = Vector3.zero; // [New] Offset to fix prop pivot issues
 
     [Header("Underwater Settings")]
@@ -117,7 +117,7 @@ public class MainPlayerScript : NetworkBehaviour
 
         if (IsOwner)
         {
-            // เก็บค่า Fog เดิมของฉากไว้คืนค่าตอนขึ้นจากน้ำ
+            // Store the original scene Fog settings to restore them after exiting the water
             defaultFogState = RenderSettings.fog;
             defaultFogColor = RenderSettings.fogColor;
             defaultFogDensity = RenderSettings.fogDensity;
@@ -144,6 +144,10 @@ public class MainPlayerScript : NetworkBehaviour
                 {
                     OnGameStartedChanged(false, true);
                 }
+            }
+            else
+            {
+                OnGameStartedChanged(false, true);
             }
         }
         else
@@ -181,14 +185,6 @@ public class MainPlayerScript : NetworkBehaviour
                 if (GameMenuManager.Instance != null) 
                     GameMenuManager.Instance.ToggleMenu(false);
             }
-
-            // Enable UI based on Role
-            PlayerStateSync state = GetComponent<PlayerStateSync>();
-            if (state != null)
-            {
-                if (state.RoleIndex.Value == 0 && survivorUI != null) survivorUI.SetActive(true);
-                if (state.RoleIndex.Value == 1 && monsterUI != null) monsterUI.SetActive(true);
-            }
         }
     }
 
@@ -216,9 +212,10 @@ public class MainPlayerScript : NetworkBehaviour
         bool isJUnlocked = myState != null && myState.IsCursorUnlocked;
 
         if (isTyping || (GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen) || isJUnlocked) return;
-        if (LobbyManager.Instance != null && !LobbyManager.Instance.IsGameStarted.Value) return;
+        bool isGameStarted = LobbyManager.Instance == null || LobbyManager.Instance.IsGameStarted.Value;
+        if (!isGameStarted) return;
 
-        if (isUnderwater) return; // ปิดการกระโดดบนพื้นเมื่ออยู่ในน้ำ
+        if (isUnderwater) return; // Disable ground jump when underwater
 
         if (context.performed && IsGrounded())
         {
@@ -234,7 +231,7 @@ public class MainPlayerScript : NetworkBehaviour
         
         bool isHit = Physics.Raycast(origin, Vector3.down, groundCheckDistance, groundLayer);
         
-        // วาดเส้นให้เห็นในหน้าต่าง Scene ตอนทดสอบ (สีเขียว = แตะพื้นโดดได้, สีแดง = ลอยอยู่โดดไม่ได้)
+        // Draw debug ray in Scene view (Green = Grounded, Red = Airborne)
         Debug.DrawRay(origin, Vector3.down * groundCheckDistance, isHit ? Color.green : Color.red, 2f);
         
         return isHit;
@@ -250,7 +247,7 @@ public class MainPlayerScript : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        // ถ้าล็อกตัวละครอยู่ ห้ามโจมตี/แปลงร่าง
+        // Prevent attack/transform if the character cursor is unlocked or typing
         PlayerStateSync stateForFire = GetComponent<PlayerStateSync>();
         bool isJUnlocked = stateForFire != null && stateForFire.IsCursorUnlocked;
 
@@ -295,6 +292,42 @@ public class MainPlayerScript : NetworkBehaviour
         {
             Debug.Log("[PropHunt] Reset to Human Input Triggered");
             ResetToHumanServerRpc();
+        }
+    }
+
+    public void OnInteract(InputAction.CallbackContext context)
+    {
+        if (!IsOwner) return;
+
+        // Trigger interact when the button is pressed (Started)
+        if (context.started)
+        {
+            PlayerStateSync myState = GetComponent<PlayerStateSync>();
+            bool isJUnlocked = myState != null && myState.IsCursorUnlocked;
+            FishMinigameManager minigameManager = GetComponent<FishMinigameManager>();
+
+            if (isTyping || (GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen) || isJUnlocked) return;
+            if (minigameManager != null && minigameManager.IsMinigamePlaying) return;
+
+            if (cameraTransform != null)
+            {
+                Ray ray = new Ray(cameraTransform.position, cameraTransform.forward);
+                
+                // ใช้ SphereCastAll เพื่อทะลุตัวละครของเราเองและทำให้เล็งโดนง่ายขึ้น
+                RaycastHit[] hits = Physics.SphereCastAll(ray, interactRadius, interactRange);
+                
+                foreach (RaycastHit hit in hits)
+                {
+                    if (hit.collider.transform.root == transform.root) continue; // ข้ามโมเดลตัวละครของเราเอง
+
+                    FishMinigameInteractable interactable = hit.collider.GetComponentInParent<FishMinigameInteractable>();
+                    if (interactable != null)
+                    {
+                        interactable.StartMinigame(minigameManager);
+                        break; // เจอเป้าหมายแล้วหยุดค้นหา
+                    }
+                }
+            }
         }
     }
 
@@ -350,14 +383,14 @@ public class MainPlayerScript : NetworkBehaviour
             // (Optional) Draw a red Ray in Scene View to show direction (lasts 2 seconds)
             Debug.DrawRay(ray.origin, ray.direction * interactRange, Color.red, 2f);
 
-            // ใช้ SphereCastAll เพื่อให้ทะลุตัวละครของเราเองไปหา Prop ที่อยู่ด้านหน้าได้
+            // Use SphereCastAll to pass through our own character and find the Prop in front
             RaycastHit[] hits = Physics.SphereCastAll(ray, interactRadius, interactRange);
             bool hitProp = false;
 
-            // วนลูปเช็คสิ่งที่ยิงโดนทั้งหมด
+            // Loop through all hits
             foreach (RaycastHit hit in hits)
             {
-                // ถ้าชนโดนตัวละครของเราเอง ให้ข้ามไปเช็คชิ้นต่อไป
+                // Skip if hitting our own character
                 if (hit.collider.transform.root == transform.root) continue;
 
                 Debug.Log($"[PropHunt] SphereCast hit: {hit.collider.gameObject.name} | Tag: {hit.collider.tag}");
@@ -368,7 +401,7 @@ public class MainPlayerScript : NetworkBehaviour
                     // Send command to Server to change model
                     ChangePropServerRpc(hit.collider.gameObject.name);
                     hitProp = true;
-                    break; // หยุดค้นหาเมื่อเจอ Prop ตัวแรกแล้ว
+                    break; // Stop searching after finding the first Prop
                 }
             }
 
@@ -454,7 +487,7 @@ public class MainPlayerScript : NetworkBehaviour
             currentMeshTransform = playerVisualBody; // Reset camera target to human
         }
         
-        // 3. เปิด UI เฉพาะของ Survivor กลับมา
+        // 3. Re-enable Survivor UI for the owner
         if (IsOwner && survivorUI != null)
         {
             survivorUI.SetActive(true);
@@ -467,8 +500,25 @@ public class MainPlayerScript : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        // Check if game has started, if not return early (prevent looking)
-        if (LobbyManager.Instance != null && !LobbyManager.Instance.IsGameStarted.Value) return;
+        bool isGameStarted = LobbyManager.Instance == null || LobbyManager.Instance.IsGameStarted.Value;
+
+        // เปิด/ปิด UI ให้ตรงกับฝ่ายที่เลือก (RoleIndex) และสถานะเกม
+        PlayerStateSync stateSync = GetComponent<PlayerStateSync>();
+        if (stateSync != null)
+        {
+            if (isGameStarted)
+            {
+                if (survivorUI != null && survivorUI.activeSelf != (stateSync.RoleIndex.Value == 0)) survivorUI.SetActive(stateSync.RoleIndex.Value == 0);
+                if (monsterUI != null && monsterUI.activeSelf != (stateSync.RoleIndex.Value == 1)) monsterUI.SetActive(stateSync.RoleIndex.Value == 1);
+            }
+            else
+            {
+                if (survivorUI != null && survivorUI.activeSelf) survivorUI.SetActive(false);
+                if (monsterUI != null && monsterUI.activeSelf) monsterUI.SetActive(false);
+            }
+        }
+
+        if (!isGameStarted) return;
 
         // Check menu
         if (GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen) return;
@@ -476,11 +526,11 @@ public class MainPlayerScript : NetworkBehaviour
         // Toggle typing mode when pressing Slash (/)
         if (Keyboard.current != null && Keyboard.current.slashKey.wasPressedThisFrame)
         {
-            // สลับสถานะการล็อกตัวละคร
+            // Toggle character lock state
             isTyping = !isTyping;
         }
 
-        // ออกจากการล็อกเมื่อกด Enter หรือ Escape
+        // Exit typing lock when Enter or Escape is pressed
         else if (isTyping && Keyboard.current != null && 
                  (Keyboard.current.enterKey.wasPressedThisFrame || 
                   Keyboard.current.numpadEnterKey.wasPressedThisFrame || 
@@ -491,13 +541,20 @@ public class MainPlayerScript : NetworkBehaviour
         
         PlayerStateSync myState = GetComponent<PlayerStateSync>();
         bool isJUnlocked = myState != null && myState.IsCursorUnlocked;
+        FishMinigameManager minigameManager = GetComponent<FishMinigameManager>();
+        bool isMinigameOpen = minigameManager != null && minigameManager.IsMinigamePlaying;
 
-        // [สำคัญ!] บังคับล็อกและซ่อนเมาส์ "ทุกเฟรม" ระหว่างอยู่ในเกม
-        // (สู้กับปลั๊กอินอื่นเช่น Quantum Console ที่พยายามจะดึงเมาส์ขึ้นมาตอนเรากดปุ่ม)
-        if (!isJUnlocked)
+        // [Important] Force hide and lock mouse every frame while in-game
+        // (To combat plugins like Quantum Console from stealing the mouse)
+        if (!isJUnlocked && !isMinigameOpen)
         {
             Cursor.lockState = CursorLockMode.Locked;
             Cursor.visible = false;
+        }
+        else if (isMinigameOpen)
+        {
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
 
         // Smoothly move the CameraTarget to the current active mesh position
@@ -539,7 +596,7 @@ public class MainPlayerScript : NetworkBehaviour
             actualCameraComponent.fieldOfView = Mathf.Lerp(actualCameraComponent.fieldOfView, targetFOV, Time.deltaTime * zoomSmoothTime);
         }
 
-        if (!isJUnlocked && !isTyping)
+        if (!isJUnlocked && !isTyping && !isMinigameOpen)
         {
             Look();
         }
@@ -549,8 +606,9 @@ public class MainPlayerScript : NetworkBehaviour
     {
         if (!IsOwner) return;
 
-        // If game hasn't started, stop velocity and return (prevent moving)
-        if (LobbyManager.Instance != null && !LobbyManager.Instance.IsGameStarted.Value)
+        bool isGameStarted = LobbyManager.Instance == null || LobbyManager.Instance.IsGameStarted.Value;
+
+        if (!isGameStarted)
         {
             rb.velocity = new Vector3(0, rb.velocity.y, 0);
             return;
@@ -558,9 +616,11 @@ public class MainPlayerScript : NetworkBehaviour
 
         PlayerStateSync myState = GetComponent<PlayerStateSync>();
         bool isJUnlocked = myState != null && myState.IsCursorUnlocked;
+        FishMinigameManager minigameManager = GetComponent<FishMinigameManager>();
+        bool isMinigameOpen = minigameManager != null && minigameManager.IsMinigamePlaying;
 
         // Stop moving if menu is open or typing
-        if ((GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen) || isTyping || isJUnlocked)
+        if ((GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen) || isTyping || isJUnlocked || isMinigameOpen)
         {
             rb.velocity = new Vector3(0, rb.velocity.y, 0);
             return;
@@ -573,7 +633,7 @@ public class MainPlayerScript : NetworkBehaviour
     {
         if (!IsOwner) return;
         
-        // ต้องตั้ง Tag ของวัตถุน้ำ (เช่น น้ำทะเล, สระน้ำ) ใน Unity ให้เป็น "Water" และติ๊ก Is Trigger ไว้
+        // Make sure to set the Water object's Tag to "Water" and check "Is Trigger"
         if (other.CompareTag("Water"))
         {
             isUnderwater = true;
@@ -583,7 +643,7 @@ public class MainPlayerScript : NetworkBehaviour
                 rb.useGravity = false;
             }
             
-            // เอฟเฟกต์หมอกใต้น้ำ (เปลี่ยนบรรยากาศภาพบนจอ)
+            // Underwater fog effect
             RenderSettings.fog = true;
             RenderSettings.fogColor = new Color(0.1f, 0.4f, 0.7f, 0.6f);
             RenderSettings.fogDensity = 0.05f;
@@ -604,7 +664,7 @@ public class MainPlayerScript : NetworkBehaviour
                 rb.useGravity = defaultUseGravity;
             }
             
-            // คืนค่าเอฟเฟกต์หมอกเดิมเมื่อขึ้นจากน้ำ
+            // Restore original fog settings when exiting water
             RenderSettings.fog = defaultFogState;
             RenderSettings.fogColor = defaultFogColor;
             RenderSettings.fogDensity = defaultFogDensity;
@@ -622,7 +682,7 @@ public class MainPlayerScript : NetworkBehaviour
         float lookX = lookInput.x * mouseSensitivityX * Time.deltaTime;
         float lookY = lookInput.y * mouseSensitivityY * Time.deltaTime;
 
-        // หมุนทั้งตัวละครเสมอ กล้องจะได้ไปพร้อมกับตัวละคร
+        // Rotate the entire character so the camera rotates along with it
         transform.Rotate(Vector3.up * lookX);
 
         if (cameraTransform != null)
@@ -641,7 +701,7 @@ public class MainPlayerScript : NetworkBehaviour
         Vector3 forward = cameraTransform != null ? cameraTransform.forward : transform.forward;
         Vector3 right = cameraTransform != null ? cameraTransform.right : transform.right;
 
-        // ถ้าไม่ได้อยู่ในน้ำ ให้บังคับเดินเฉพาะแนวราบ
+        // If not underwater, lock movement to horizontal plane
         if (!isUnderwater)
         {
             forward.y = 0f;
@@ -653,16 +713,16 @@ public class MainPlayerScript : NetworkBehaviour
 
         Vector3 moveDirection = (forward * moveInput.y + right * moveInput.x).normalized;
         
-        // เช็คว่ากด Shift วิ่งอยู่ และ ต้องเป็นการกดเดินหน้า (W) เท่านั้น
+        // Check if sprinting (W key must be held to sprint on ground)
         bool isActuallySprinting = isSprinting && moveInput.y > 0;
 
         if (isUnderwater)
         {
-            // ระบบว่ายน้ำ (ลอยตัวและเคลื่อนที่ตามมุมกล้องแบบ 3 มิติ)
-            bool isSwimSprinting = isSprinting; // ว่ายเร็วขึ้นเมื่อกด Shift ไม่ว่าจะไปทิศทางไหน
+            // Swimming System (Float and move 3D based on camera)
+            bool isSwimSprinting = isSprinting; // Swim faster on Shift regardless of direction
             float currentSpeed = isSwimSprinting ? swimSprintSpeed : swimSpeed;
             
-            // ให้กด Spacebar เพื่อว่ายขึ้นตรงๆ ได้
+            // Allow swimming straight up with Spacebar
             if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
             {
                 moveDirection.y += 1f;
@@ -670,10 +730,10 @@ public class MainPlayerScript : NetworkBehaviour
             
             Vector3 targetVelocity = moveDirection.normalized * currentSpeed;
             
-            // ว่ายแบบค่อยๆ เปลี่ยนความเร็ว (หนืดๆ เหมือนอยู่ในน้ำจริงๆ)
+            // Smooth velocity transition for underwater drag effect
             rb.velocity = Vector3.Lerp(rb.velocity, targetVelocity, Time.deltaTime * 5f);
 
-            // หมุนโมเดลตัวละครตามทิศที่กำลังไป (เฉพาะแกนราบ)
+            // Rotate visual body toward movement direction (horizontal axis only)
             if (playerVisualBody != null && moveDirection.sqrMagnitude > 0.01f)
             {
                 Vector3 lookDir = moveDirection;
@@ -687,7 +747,7 @@ public class MainPlayerScript : NetworkBehaviour
         }
         else
         {
-            // ระบบเดินบนบก (แบบเดิม)
+            // Ground movement system
             float currentSpeed = isActuallySprinting ? sprintSpeed : moveSpeed;
             Vector3 targetVelocity = moveDirection * currentSpeed;
 
