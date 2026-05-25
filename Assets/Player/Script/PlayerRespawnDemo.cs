@@ -8,9 +8,7 @@ public class PlayerRespawnDemo : NetworkBehaviour
     
     private void Start()
     {
-        GameObject point = GameObject.Find("ReSpawnPoint");
-        if (point != null) { respawnPoint = point.transform; }
-        else { Debug.LogError("ReSpawnPoint not found in scene."); }
+        
     }
 
     public void RequestRespawn(InputAction.CallbackContext context)

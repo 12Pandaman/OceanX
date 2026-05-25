@@ -181,6 +181,36 @@ public class ConnectionManager : MonoBehaviour
     // ═════════════════════════════════════════════
     //  A) Direct Relay Buttons
     // ═════════════════════════════════════════════
+    
+    /// <summary>ปุ่ม Test: เล่นแบบ Offline (Local Host) ไม่ผ่าน Server/Relay เข้าเกมทันที</summary>
+    public void OnTestLocalButtonClicked()
+    {
+        _isLeaving = false;
+        
+        LocalUsername = (usernameInput != null && !string.IsNullOrWhiteSpace(usernameInput.text))
+            ? usernameInput.text.Trim()
+            : $"Tester{UnityEngine.Random.Range(1000, 9999)}";
+
+        if (loginPanel != null) loginPanel.SetActive(false);
+        SetError("Starting local test...", Color.yellow);
+        
+        _startAsHost = true;
+        _hostCharIndex = 0; // เริ่มเป็น Survivor ตัวแรก
+        SetConnectionData(LocalUsername, _hostCharIndex);
+        
+        // บังคับให้ใช้ Localhost แทน Relay
+        UnityTransport transport = GetUnityTransport();
+        if (transport != null)
+        {
+            transport.SetConnectionData("127.0.0.1", 7777);
+        }
+        
+        NetworkManager.Singleton.StartHost();
+        ClearError();
+        
+        Debug.Log("[ConnectionManager] Started local test host (Offline mode).");
+    }
+
     public async void OnPlayButtonClicked()
     {
         string userName = (usernameInput != null && !string.IsNullOrWhiteSpace(usernameInput.text))
