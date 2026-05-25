@@ -48,6 +48,18 @@ public class MainPlayerScript : NetworkBehaviour
     public float interactRadius = 0.5f; // ความกว้างของเป้าเล็ง (รัศมี) ยิ่งเยอะยิ่งเล็งโดนง่าย
     public Vector3 propPositionOffset = Vector3.zero; // [New] Offset to fix prop pivot issues
 
+    [Header("Underwater Settings")]
+    public bool isUnderwater = false;
+    public float swimSpeed = 4f;
+    public float swimSprintSpeed = 8f;
+    public float waterDrag = 3f;
+    private float defaultDrag = 0f;
+    private bool defaultUseGravity = true;
+    private bool defaultFogState;
+    private Color defaultFogColor;
+    private float defaultFogDensity;
+    private FogMode defaultFogMode;
+
     // Variables to control Player Input
     private PlayerInput playerInput;
     private PlayerCameraSetup cameraSetup;
@@ -66,6 +78,12 @@ public class MainPlayerScript : NetworkBehaviour
     public override void OnNetworkSpawn()
     {
         rb = GetComponent<Rigidbody>();
+        if (rb != null)
+        {
+            defaultDrag = rb.drag;
+            defaultUseGravity = rb.useGravity;
+        }
+
         playerInput = GetComponent<PlayerInput>(); // Get the Component
 
         // Try to find Camera automatically if not assigned in Inspector
@@ -99,6 +117,12 @@ public class MainPlayerScript : NetworkBehaviour
 
         if (IsOwner)
         {
+            // เก็บค่า Fog เดิมของฉากไว้คืนค่าตอนขึ้นจากน้ำ
+            defaultFogState = RenderSettings.fog;
+            defaultFogColor = RenderSettings.fogColor;
+            defaultFogDensity = RenderSettings.fogDensity;
+            defaultFogMode = RenderSettings.fogMode;
+
             // Enable local camera and Input
             if (cameraTransform != null) cameraTransform.gameObject.SetActive(true);
             if (playerInput != null) playerInput.enabled = true;
@@ -193,6 +217,8 @@ public class MainPlayerScript : NetworkBehaviour
 
         if (isTyping || (GameMenuManager.Instance != null && GameMenuManager.Instance.isMenuOpen) || isJUnlocked) return;
         if (LobbyManager.Instance != null && !LobbyManager.Instance.IsGameStarted.Value) return;
+
+        if (isUnderwater) return; // ปิดการกระโดดบนพื้นเมื่ออยู่ในน้ำ
 
         if (context.performed && IsGrounded())
         {
@@ -543,6 +569,49 @@ public class MainPlayerScript : NetworkBehaviour
         Move();
     }
 
+    private void OnTriggerEnter(Collider other)
+    {
+        if (!IsOwner) return;
+        
+        // ต้องตั้ง Tag ของวัตถุน้ำ (เช่น น้ำทะเล, สระน้ำ) ใน Unity ให้เป็น "Water" และติ๊ก Is Trigger ไว้
+        if (other.CompareTag("Water"))
+        {
+            isUnderwater = true;
+            if (rb != null)
+            {
+                rb.drag = waterDrag;
+                rb.useGravity = false;
+            }
+            
+            // เอฟเฟกต์หมอกใต้น้ำ (เปลี่ยนบรรยากาศภาพบนจอ)
+            RenderSettings.fog = true;
+            RenderSettings.fogColor = new Color(0.1f, 0.4f, 0.7f, 0.6f);
+            RenderSettings.fogDensity = 0.05f;
+            RenderSettings.fogMode = FogMode.Exponential;
+        }
+    }
+
+    private void OnTriggerExit(Collider other)
+    {
+        if (!IsOwner) return;
+        
+        if (other.CompareTag("Water"))
+        {
+            isUnderwater = false;
+            if (rb != null)
+            {
+                rb.drag = defaultDrag;
+                rb.useGravity = defaultUseGravity;
+            }
+            
+            // คืนค่าเอฟเฟกต์หมอกเดิมเมื่อขึ้นจากน้ำ
+            RenderSettings.fog = defaultFogState;
+            RenderSettings.fogColor = defaultFogColor;
+            RenderSettings.fogDensity = defaultFogDensity;
+            RenderSettings.fogMode = defaultFogMode;
+        }
+    }
+
     [Header("Visual Body")]
     public Transform playerVisualBody;
     public float bodyRotationSpeed = 10f;
@@ -572,8 +641,13 @@ public class MainPlayerScript : NetworkBehaviour
         Vector3 forward = cameraTransform != null ? cameraTransform.forward : transform.forward;
         Vector3 right = cameraTransform != null ? cameraTransform.right : transform.right;
 
-        forward.y = 0f;
-        right.y = 0f;
+        // ถ้าไม่ได้อยู่ในน้ำ ให้บังคับเดินเฉพาะแนวราบ
+        if (!isUnderwater)
+        {
+            forward.y = 0f;
+            right.y = 0f;
+        }
+
         forward.Normalize();
         right.Normalize();
 
@@ -582,15 +656,48 @@ public class MainPlayerScript : NetworkBehaviour
         // เช็คว่ากด Shift วิ่งอยู่ และ ต้องเป็นการกดเดินหน้า (W) เท่านั้น
         bool isActuallySprinting = isSprinting && moveInput.y > 0;
 
-        float currentSpeed = isActuallySprinting ? sprintSpeed : moveSpeed;
-        Vector3 targetVelocity = moveDirection * currentSpeed;
-
-        rb.velocity = new Vector3(targetVelocity.x, rb.velocity.y, targetVelocity.z);
-
-        if (playerVisualBody != null && moveDirection.sqrMagnitude > 0.01f)
+        if (isUnderwater)
         {
-            Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
-            playerVisualBody.rotation = Quaternion.Slerp(playerVisualBody.rotation, targetRotation, Time.deltaTime * bodyRotationSpeed);
+            // ระบบว่ายน้ำ (ลอยตัวและเคลื่อนที่ตามมุมกล้องแบบ 3 มิติ)
+            bool isSwimSprinting = isSprinting; // ว่ายเร็วขึ้นเมื่อกด Shift ไม่ว่าจะไปทิศทางไหน
+            float currentSpeed = isSwimSprinting ? swimSprintSpeed : swimSpeed;
+            
+            // ให้กด Spacebar เพื่อว่ายขึ้นตรงๆ ได้
+            if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed)
+            {
+                moveDirection.y += 1f;
+            }
+            
+            Vector3 targetVelocity = moveDirection.normalized * currentSpeed;
+            
+            // ว่ายแบบค่อยๆ เปลี่ยนความเร็ว (หนืดๆ เหมือนอยู่ในน้ำจริงๆ)
+            rb.velocity = Vector3.Lerp(rb.velocity, targetVelocity, Time.deltaTime * 5f);
+
+            // หมุนโมเดลตัวละครตามทิศที่กำลังไป (เฉพาะแกนราบ)
+            if (playerVisualBody != null && moveDirection.sqrMagnitude > 0.01f)
+            {
+                Vector3 lookDir = moveDirection;
+                lookDir.y = 0; 
+                if (lookDir != Vector3.zero)
+                {
+                    Quaternion targetRotation = Quaternion.LookRotation(lookDir);
+                    playerVisualBody.rotation = Quaternion.Slerp(playerVisualBody.rotation, targetRotation, Time.deltaTime * bodyRotationSpeed);
+                }
+            }
+        }
+        else
+        {
+            // ระบบเดินบนบก (แบบเดิม)
+            float currentSpeed = isActuallySprinting ? sprintSpeed : moveSpeed;
+            Vector3 targetVelocity = moveDirection * currentSpeed;
+
+            rb.velocity = new Vector3(targetVelocity.x, rb.velocity.y, targetVelocity.z);
+
+            if (playerVisualBody != null && moveDirection.sqrMagnitude > 0.01f)
+            {
+                Quaternion targetRotation = Quaternion.LookRotation(moveDirection);
+                playerVisualBody.rotation = Quaternion.Slerp(playerVisualBody.rotation, targetRotation, Time.deltaTime * bodyRotationSpeed);
+            }
         }
     }
 }
