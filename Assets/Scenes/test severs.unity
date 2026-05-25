@@ -259,7 +259,7 @@ GameObject:
   - component: {fileID: 223591198}
   - component: {fileID: 223591197}
   m_Layer: 0
-  m_Name: Cube
+  m_Name: Ocean
   m_TagString: Water
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -2732,6 +2732,29 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1189252019}
   m_CullTransparentMesh: 1
+--- !u!1 &1215809752 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 2039340238271574332, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+  m_PrefabInstance: {fileID: 2591301905502220288}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1215809758
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1215809752}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d7205e1bb89aaaf4285696136bdc3196, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  fishNameQuestion: What is the name of this fish?
+  choices:
+  - Shark
+  - Clownfish
+  - Dolphin
+  correctChoiceIndex: 2
 --- !u!1 &1275912788
 GameObject:
   m_ObjectHideFlags: 0
@@ -3417,7 +3440,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_Material: {fileID: 0}
-  m_Color: {r: 0.3207547, g: 0.38468367, b: 1, a: 1}
+  m_Color: {r: 0.3207547, g: 0.38468367, b: 1, a: 0}
   m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -4274,7 +4297,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 2.3302, y: 0, z: 9.727844}
-  m_LocalScale: {x: 11.695093, y: 11.695093, z: 11.695093}
+  m_LocalScale: {x: 5.0792956, y: 5.0792956, z: 5.0792956}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 793527463}
@@ -4829,7 +4852,7 @@ MonoBehaviour:
   - {fileID: 698870840}
   - {fileID: 1994139340}
   useRandomSpawn: 0
-  alternatePlayerPrefabHashes: 5f3f4117
+  alternatePlayerPrefabHashes: e4c46898
   usernameInput: {fileID: 0}
   loginPanel: {fileID: 1566382546}
   leaveButton: {fileID: 1098936215}
@@ -4840,7 +4863,6 @@ MonoBehaviour:
   relayClientJoinCodeInput: {fileID: 0}
   characterPanel: {fileID: 684247351}
   characterButtons:
-  - {fileID: 0}
   - {fileID: 1744860344}
   lobbyJoinCodeInput: {fileID: 0}
   lobbyCodeDisplayText: {fileID: 0}
@@ -4936,7 +4958,7 @@ MonoBehaviour:
   NetworkConfig:
     ProtocolVersion: 0
     NetworkTransport: {fileID: 1904978331}
-    PlayerPrefab: {fileID: 1173796809025027970, guid: 9e02e75a813888447ba9fe364186fd32, type: 3}
+    PlayerPrefab: {fileID: 8303703998559852815, guid: 59e26da1e1d7fa749866d02038fb01c3, type: 3}
     Prefabs:
       NetworkPrefabsLists:
       - {fileID: 11400000, guid: d0c28236818c9eb45b7a47132238cc0d, type: 2}
@@ -4991,7 +5013,6 @@ MonoBehaviour:
   loginPanel: {fileID: 1566382546}
   characterPanel: {fileID: 684247351}
   characterButtons:
-  - {fileID: 0}
   - {fileID: 1744860344}
   lobbyName: QuickJoinLobby
   maxPlayers: 4
@@ -5732,6 +5753,67 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: 11b73f700fdec774ebdbcf75a63176d0, type: 3}
+--- !u!1001 &2591301905502220288
+PrefabInstance:
+  m_ObjectHideFlags: 0
+  serializedVersion: 2
+  m_Modification:
+    serializedVersion: 3
+    m_TransformParent: {fileID: 0}
+    m_Modifications:
+    - target: {fileID: 2039340238271574332, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_Name
+      value: Cube (1)
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalPosition.x
+      value: -0.36
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalPosition.y
+      value: 1.76
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalPosition.z
+      value: 6.88
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalRotation.w
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalRotation.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalRotation.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalRotation.z
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.x
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.y
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6631624510871316586, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      propertyPath: m_LocalEulerAnglesHint.z
+      value: 0
+      objectReference: {fileID: 0}
+    m_RemovedComponents: []
+    m_RemovedGameObjects:
+    - {fileID: 8737698222533468915, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+    m_AddedGameObjects: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 2039340238271574332, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1215809758}
+  m_SourcePrefab: {fileID: 100100000, guid: 501ab632a3679d244a7e6f7fc5482106, type: 3}
 --- !u!114 &5725512892422472663 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 3297809572098574940, guid: 11b73f700fdec774ebdbcf75a63176d0, type: 3}
@@ -5776,3 +5858,4 @@ SceneRoots:
   - {fileID: 1967095478}
   - {fileID: 1784633977}
   - {fileID: 223591200}
+  - {fileID: 2591301905502220288}
