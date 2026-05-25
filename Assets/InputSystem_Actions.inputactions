@@ -95,33 +95,6 @@
                     "processors": "",
                     "interactions": "",
                     "initialStateCheck": false
-                },
-                {
-                    "name": "Respawn",
-                    "type": "Button",
-                    "id": "8cd1b31b-e032-4f78-96e1-10a9cbab9b97",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "Taunt",
-                    "type": "Button",
-                    "id": "24144048-f6b3-4268-91f5-ae9a4add2365",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
-                },
-                {
-                    "name": "Reset to Human",
-                    "type": "Button",
-                    "id": "04d7c875-3e36-42aa-aabf-8ae0517e62ee",
-                    "expectedControlType": "",
-                    "processors": "",
-                    "interactions": "",
-                    "initialStateCheck": false
                 }
             ],
             "bindings": [
@@ -529,39 +502,6 @@
                     "processors": "",
                     "groups": "",
                     "action": "TestRpc",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "67bb39e3-7336-4552-9394-80f3c8dfc4b4",
-                    "path": "<Keyboard>/equals",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Respawn",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "8e30c75b-3343-449b-93ca-c805bb60185f",
-                    "path": "<Keyboard>/q",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Taunt",
-                    "isComposite": false,
-                    "isPartOfComposite": false
-                },
-                {
-                    "name": "",
-                    "id": "5c0e67c4-ce15-488d-8add-e7e07aa8eb9c",
-                    "path": "<Keyboard>/r",
-                    "interactions": "",
-                    "processors": "",
-                    "groups": "",
-                    "action": "Reset to Human",
                     "isComposite": false,
                     "isPartOfComposite": false
                 }

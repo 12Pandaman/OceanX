@@ -29,38 +29,41 @@ public class LobbyManager : NetworkBehaviour
 
     public override void OnNetworkSpawn()
     {
-        // ซ่อนปุ่ม Start Game ถ้าไม่ใช่ Host
-        if (startGameButton != null)
+        if (IsServer)
         {
-            startGameButton.gameObject.SetActive(IsServer);
+            IsGameStarted.Value = true;
         }
 
         IsGameStarted.OnValueChanged += OnGameStarted;
 
-        // *** จุดสำคัญ: เปิดหน้าจอ Lobby ทันทีที่ผู้เล่นเกิดในเซิร์ฟเวอร์ ***
-        if (lobbyPanel != null && !IsGameStarted.Value)
+        // ข้ามหน้า Lobby UI ไปเลย และดึงเมาส์กลับเข้าเกม (เข้าเกมทันที)
+        if (lobbyPanel != null)
         {
-            lobbyPanel.SetActive(true);
+            lobbyPanel.SetActive(false);
         }
 
-        // เปิดเมาส์ให้กดปุ่ม Ready ได้
-        Cursor.lockState = CursorLockMode.None;
-        Cursor.visible = true;
+        // ถ้าเกมเริ่มแล้ว (หรือเริ่มทันที) ให้ซ่อนเมาส์
+        if (IsGameStarted.Value)
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
+        else
+        {
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
+        }
     }
 
     public override void OnNetworkDespawn()
     {
-        // ปิดหน้า Lobby เมื่อหลุดจากเซิร์ฟเวอร์
         if (lobbyPanel != null) lobbyPanel.SetActive(false);
         IsGameStarted.OnValueChanged -= OnGameStarted;
     }
 
     private void Update()
     {
-        if (!IsSpawned || IsGameStarted.Value) return;
-
-        UpdateLobbyUI();
-        CheckIfAllReady();
+        // เราจะไม่ใช้หน้า Lobby แล้ว จึงไม่ต้องทำงานอะไรในนี้
     }
 
     private void UpdateLobbyUI()

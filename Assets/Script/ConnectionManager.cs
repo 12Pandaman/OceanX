@@ -49,7 +49,9 @@ public class ConnectionManager : MonoBehaviour
     [SerializeField] private GameObject     loginPanel;
     [SerializeField] private GameObject     leaveButton;
     [SerializeField] public  TMP_Text       errorText;
-    [SerializeField] public  Button         clientButton;   // Relay Client button
+    [SerializeField] public  Button         clientButton;   // Play / Join button
+    [Tooltip("ปุ่ม Host (Server) — ซ่อนอยู่ กด '/' เพื่อเปิด/ปิด")]
+    [SerializeField] private GameObject     serverButton;   // Host button — toggle with '/'
 
     // ─────────────────────────────────────────────
     //  Inspector — Direct Relay UI
@@ -118,6 +120,9 @@ public class ConnectionManager : MonoBehaviour
     {
         NetworkManager.Singleton.ConnectionApprovalCallback = ApprovalCheck;
         if (errorText != null) errorText.gameObject.SetActive(false);
+
+        // ซ่อน Server button ตอนเริ่ม (กด '/' เพื่อเปิด)
+        if (serverButton != null) serverButton.SetActive(false);
     }
 
     private void Update()
@@ -128,6 +133,13 @@ public class ConnectionManager : MonoBehaviour
         {
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible   = true;
+        }
+
+        // กด '/' เพื่อ toggle ปุ่ม Server (Host) ให้แสดง/ซ่อน
+        if (Input.GetKeyDown(KeyCode.Slash) && loginPanel != null && loginPanel.activeSelf)
+        {
+            if (serverButton != null)
+                serverButton.SetActive(!serverButton.activeSelf);
         }
 
         // Lobby heartbeat + polling run every frame (cheap no-ops when not in a lobby)
@@ -169,12 +181,117 @@ public class ConnectionManager : MonoBehaviour
     // ═════════════════════════════════════════════
     //  A) Direct Relay Buttons
     // ═════════════════════════════════════════════
+    public async void OnPlayButtonClicked()
+    {
+        string userName = (usernameInput != null && !string.IsNullOrWhiteSpace(usernameInput.text))
+            ? usernameInput.text.Trim()
+            : $"Player{UnityEngine.Random.Range(1000, 9999)}";
+        LocalUsername = userName;
+        _isLeaving = false;
+
+        // ปิด PollLobbyForRelayCode (ระบบเก่า) ไม่ให้รบกวน
+        _relayCodeReceived = true;
+        _isLobbyHost = true;
+
+        if (loginPanel != null) loginPanel.SetActive(false);
+        SetError("Searching for game...", Color.yellow);
+
+        try
+        {
+            await InitServices();
+
+            bool joinedAsClient = false;
+
+            // ✅ รอแบบสุ่ม (0-2 วิ) เพื่อให้คนที่รอน้อยกว่าสร้างห้องก่อน
+            //    ถ้ากด Play พร้อมกัน คนหนึ่งจะรอน้อย → เป็น Host, คนอื่น → รอนานกว่า → เจอห้องและเข้าได้
+            int initialDelay = UnityEngine.Random.Range(0, 2001); // 0-2000 ms
+            Debug.Log($"[ConnectionManager] Initial delay: {initialDelay}ms before searching...");
+            await Task.Delay(initialDelay);
+
+            // พยายาม Quick Join ซ้ำหลายครั้ง (รอ Host สร้างห้องเสร็จก่อน)
+            const int maxRetries = 6;
+            const int retryDelayMs = 2000;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                try
+                {
+                    Debug.Log($"[ConnectionManager] Quick Join attempt {attempt}/{maxRetries}...");
+                    SetError($"Searching for game... ({attempt}/{maxRetries})", Color.yellow);
+
+                    _joinedLobby = await LobbyService.Instance.QuickJoinLobbyAsync();
+
+                    if (_joinedLobby.Data != null && _joinedLobby.Data.TryGetValue(KEY_RELAY_CODE, out DataObject dataObj)
+                        && !string.IsNullOrWhiteSpace(dataObj.Value))
+                    {
+                        string joinCode = dataObj.Value;
+                        Debug.Log($"[ConnectionManager] Quick Join success, relay code: {joinCode}");
+                        JoinAllocation joinAllocation = await RelayService.Instance.JoinAllocationAsync(joinCode);
+
+                        UnityTransport transport = GetUnityTransport();
+                        transport.SetClientRelayData(
+                            joinAllocation.RelayServer.IpV4,
+                            (ushort)joinAllocation.RelayServer.Port,
+                            joinAllocation.AllocationIdBytes,
+                            joinAllocation.Key,
+                            joinAllocation.ConnectionData,
+                            joinAllocation.HostConnectionData
+                        );
+                        joinedAsClient = true;
+                        break; // สำเร็จ
+                    }
+                    // เจอ lobby แต่ยังไม่มี relay code → รอแล้วลองใหม่
+                    await Task.Delay(retryDelayMs);
+                }
+                catch (LobbyServiceException e) when (e.Reason == LobbyExceptionReason.NoOpenLobbies)
+                {
+                    Debug.Log($"[ConnectionManager] No lobbies found (attempt {attempt}/{maxRetries})");
+                    if (attempt < maxRetries)
+                        await Task.Delay(retryDelayMs);
+                    // attempt สุดท้าย → ออกจาก loop → กลายเป็น Host
+                }
+            }
+
+            // ไม่ได้ join → เป็น Host
+            if (!joinedAsClient)
+            {
+                SetError("Creating new game...", Color.yellow);
+                await ConfigureRelayHost();
+                _startAsHost = true;
+            }
+            else
+            {
+                _startAsHost = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            SetError($"Connection error: {ex.Message}", Color.red);
+            if (loginPanel != null) loginPanel.SetActive(true);
+            return;
+        }
+
+        ClearError();
+        // ข้ามหน้าเลือกตัวละคร — Spawn ตัวละคร index 0 เลยทันที
+        OnCharacterSelected(0);
+    }
+
+    // You can keep the old methods around if you ever want them, 
+    // or just use OnPlayButtonClicked for your single "Host/Join" button.
+    /// <summary>สร้างห้องใหม่ (Host) — ไม่ต้องใส่ชื่อ ไม่ต้องเลือกตัวละคร เข้าเกมเลย</summary>
     public async void OnHostButtonClicked()
     {
-        string userName = usernameInput.text;
-        if (string.IsNullOrWhiteSpace(userName)) { SetError("Please enter a name first", Color.red); return; }
-        LocalUsername = userName;
-        _isLeaving    = false;
+        // ปิด PollLobbyForRelayCode (ระบบเก่า)
+        _relayCodeReceived = true;
+        _isLobbyHost = true;
+        _isLeaving = false;
+
+        LocalUsername = (usernameInput != null && !string.IsNullOrWhiteSpace(usernameInput.text))
+            ? usernameInput.text.Trim()
+            : $"Player{UnityEngine.Random.Range(1000, 9999)}";
+
+        if (loginPanel != null) loginPanel.SetActive(false);
+        SetError("Creating game...", Color.yellow);
 
         try
         {
@@ -183,44 +300,90 @@ public class ConnectionManager : MonoBehaviour
         }
         catch (Exception ex)
         {
-            SetError($"Relay host error: {ex.Message}", Color.red);
+            SetError($"Host error: {ex.Message}", Color.red);
+            if (loginPanel != null) loginPanel.SetActive(true);
             return;
         }
 
+        ClearError();
+        // Server เริ่มเป็น Dedicated Server — ไม่ Spawn ตัวละคร
+        LocalUsername = "Server";
+        NetworkManager.Singleton.StartServer();
+        Debug.Log("[ConnectionManager] Dedicated Server started.");
+
         if (loginPanel != null) loginPanel.SetActive(false);
-        ShowCharacterSelection(true);
-        _startAsHost = true;
+        if (leaveButton != null) leaveButton.SetActive(true);
     }
 
+    /// <summary>เข้าร่วมห้อง (Client) — ไม่ต้องใส่ code ค้นหาอัตโนมัติ เข้าเกมเลย</summary>
     public async void OnClientButtonClicked()
     {
         if (clientButton != null) clientButton.interactable = false;
 
-        string userName = usernameInput.text;
-        if (string.IsNullOrWhiteSpace(userName))
-        {
-            SetError("Please enter a name first", Color.red);
-            if (clientButton != null) clientButton.interactable = true;
-            return;
-        }
-        LocalUsername = userName;
-        _isLeaving    = false;
+        // ปิด PollLobbyForRelayCode (ระบบเก่า)
+        _relayCodeReceived = true;
+        _isLobbyHost = false;
+        _isLeaving = false;
+
+        LocalUsername = (usernameInput != null && !string.IsNullOrWhiteSpace(usernameInput.text))
+            ? usernameInput.text.Trim()
+            : $"Player{UnityEngine.Random.Range(1000, 9999)}";
+
+        if (loginPanel != null) loginPanel.SetActive(false);
+        SetError("Searching for game...", Color.yellow);
 
         try
         {
             await InitServices();
-            await ConfigureRelayClient();
+
+            // Quick Join พร้อม retry — รอให้ Host สร้างเสร็จก่อน
+            const int maxRetries = 10;
+            const int retryDelayMs = 2000;
+            bool joined = false;
+
+            for (int attempt = 1; attempt <= maxRetries; attempt++)
+            {
+                SetError($"Searching... ({attempt}/{maxRetries})", Color.yellow);
+                try
+                {
+                    _joinedLobby = await LobbyService.Instance.QuickJoinLobbyAsync();
+                    if (_joinedLobby.Data != null &&
+                        _joinedLobby.Data.TryGetValue(KEY_RELAY_CODE, out DataObject obj) &&
+                        !string.IsNullOrWhiteSpace(obj.Value))
+                    {
+                        string code = obj.Value;
+                        Debug.Log($"[ConnectionManager] Quick Join success, code: {code}");
+                        JoinAllocation jAlloc = await RelayService.Instance.JoinAllocationAsync(code);
+                        UnityTransport t = GetUnityTransport();
+                        t.SetClientRelayData(
+                            jAlloc.RelayServer.IpV4, (ushort)jAlloc.RelayServer.Port,
+                            jAlloc.AllocationIdBytes, jAlloc.Key,
+                            jAlloc.ConnectionData, jAlloc.HostConnectionData);
+                        joined = true;
+                        break;
+                    }
+                    await Task.Delay(retryDelayMs);
+                }
+                catch (LobbyServiceException e) when (e.Reason == LobbyExceptionReason.NoOpenLobbies)
+                {
+                    Debug.Log($"[ConnectionManager] No lobby found (attempt {attempt}/{maxRetries})");
+                    if (attempt < maxRetries) await Task.Delay(retryDelayMs);
+                }
+            }
+
+            if (!joined) throw new Exception("No host found. Please ask the host to create a game first.");
         }
         catch (Exception ex)
         {
-            SetError($"Relay client error: {ex.Message}", Color.red);
+            SetError($"Join error: {ex.Message}", Color.red);
+            if (loginPanel != null) loginPanel.SetActive(true);
             if (clientButton != null) clientButton.interactable = true;
             return;
         }
 
-        if (loginPanel != null) loginPanel.SetActive(false);
-        ShowCharacterSelection(true);
+        ClearError();
         _startAsHost = false;
+        OnCharacterSelected(0); // เข้าเกมทันที
     }
 
     private async Task ConfigureRelayHost()
