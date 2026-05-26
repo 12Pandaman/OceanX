@@ -21,6 +21,7 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     public float snapDistance = 50f;
 
     public bool isLocked = false;
+    public RectTransform CurrentSlot { get; private set; } = null; // เพิ่มเพื่อติดตามว่าชิ้นส่วนนี้อยู่บน slot ไหน
 
     private void Awake()
     {
@@ -58,7 +59,17 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         if (isLocked) return;
         canvasGroup.alpha = 0.8f;
         canvasGroup.blocksRaycasts = false;
+        
+        // เก็บตำแหน่งเริ่มต้นก่อนลาก
         transform.SetAsLastSibling();
+        currentStartPosition = rectTransform.anchoredPosition;
+
+        // แจ้ง Manager ว่าชิ้นส่วนนี้กำลังถูกยกออกจาก slot เดิม (ถ้ามี)
+        FishMinigameManager manager = GetComponentInParent<FishMinigameManager>();
+        if (manager != null && CurrentSlot != null) {
+            manager.FreeSlot(CurrentSlot, this);
+            CurrentSlot = null;
+        }
     }
 
     public void OnDrag(PointerEventData eventData)
@@ -74,16 +85,26 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
 
+        // ตรวจสอบว่าชิ้นส่วนนี้อยู่ภายใต้ FishJigsawBoard หรือ FishMinigameManager
         FishJigsawBoard board = GetComponentInParent<FishJigsawBoard>();
         FishMinigameManager manager = GetComponentInParent<FishMinigameManager>();
 
+        // Get all available slots from the current context (manager or board)
         RectTransform[] allSlots = null;
-        if (board != null) allSlots = board.allJigsawSlots;
-        else if (manager != null) allSlots = manager.allJigsawSlots;
+        if (manager != null)
+        {
+            allSlots = manager.allJigsawSlots;
+        }
+        else if (board != null)
+        {
+            allSlots = board.allJigsawSlots;
+        }
 
-        // ─── หาช่องที่ใกล้ที่สุด เพื่อให้วางตรงไหนก็ได้ ─────────────────────────
+        bool placed = false;
+
         if (allSlots != null && allSlots.Length > 0)
         {
+            // Find the closest slot
             RectTransform closestSlot = null;
             float minDistance = float.MaxValue;
 
@@ -98,18 +119,37 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
                 }
             }
 
+            // Check if the closest slot is within snap distance
             if (closestSlot != null && minDistance <= snapDistance)
-                rectTransform.anchoredPosition = closestSlot.anchoredPosition;
-            else
-                rectTransform.anchoredPosition = currentStartPosition;
+            {
+                // If a manager exists, use it to check if the slot is already occupied.
+                if (manager != null)
+                {
+                    if (manager.TryOccupySlot(closestSlot, this))
+                    {
+                        // Successfully occupied the correct slot.
+                        rectTransform.anchoredPosition = closestSlot.anchoredPosition;
+                        CurrentSlot = closestSlot;
+                        placed = true;
+                    }
+                    // If TryOccupySlot returns false, 'placed' remains false, and the piece will snap back.
+                }
+                else if (board != null)
+                {
+                    // Fallback to old system (FishJigsawBoard), which has no overlap check.
+                    rectTransform.anchoredPosition = closestSlot.anchoredPosition;
+                    CurrentSlot = closestSlot;
+                    placed = true;
+                }
+                // If neither a manager nor a board is found, 'placed' will remain false, and the piece will snap back.
+            }
         }
-        else
+
+        // If not placed (too far, or slot was occupied), snap back to where it was dragged from.
+        if (!placed)
         {
-            // Fallback (ถ้าไม่ได้รวม array slots ไว้)
-            if (targetSlot != null && Vector2.Distance(rectTransform.anchoredPosition, targetSlot.anchoredPosition) <= snapDistance)
-                rectTransform.anchoredPosition = targetSlot.anchoredPosition;
-            else
-                rectTransform.anchoredPosition = currentStartPosition;
+            rectTransform.anchoredPosition = currentStartPosition;
+            CurrentSlot = null; // Ensure it's not considered to be in a slot
         }
 
         // ─── แจ้งตรวจสอบว่า puzzle สำเร็จหรือยัง ─────────────────────
@@ -121,6 +161,7 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
     {
         isLocked = false;
         if (rectTransform != null) rectTransform.anchoredPosition = originalPosition;
+        CurrentSlot = null; // รีเซ็ต slot ที่ครอบครอง
         if (canvasGroup != null)
         {
             canvasGroup.alpha = 1f;
@@ -136,5 +177,6 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             currentStartPosition = originalPosition + randomOffset;
             rectTransform.anchoredPosition = currentStartPosition;
         }
+        CurrentSlot = null; // รีเซ็ต slot ที่ครอบครอง
     }
 }

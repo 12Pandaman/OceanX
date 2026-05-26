@@ -24,6 +24,7 @@ public class FishCollectionManager : MonoBehaviour
     // ── private ───────────────────────────────────────────────────────────
     private FishMinigameManager _manager;
     private FishJigsawVisual    _visual;
+    public FishMinigameManager MinigameManager => _manager;
 
     private bool[] collected     = new bool[3]; // ติดตามว่าปลา index ไหนถูกเก็บแล้ว
     private int    collectedCount = 0;           // นับลำดับ → ใช้ตั้งสี icon

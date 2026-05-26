@@ -47,11 +47,12 @@ public class FishMinigameManager : MonoBehaviour
     private string currentCorrectAnswer;
     private bool isTransitioningToQuiz = false;
     private int wrongAnswerCount = 0;
+    private Dictionary<RectTransform, JigsawPiece> _occupiedSlots = new Dictionary<RectTransform, JigsawPiece>(); // เพิ่มเพื่อติดตาม slot ที่ถูกครอบครอง
     private FishJigsawVisual jigsawVisual;
     private int currentFishIndex;
     
     private float minigameTimer = 0f;
-    private bool isTimerStopped = true;
+    private bool isTimerStopped = false; // เริ่มนับทันทีที่ตัวละครเกิด
 
     private void Awake()
     {
@@ -77,7 +78,7 @@ public class FishMinigameManager : MonoBehaviour
 
     private void Update()
     {
-        if (IsMinigamePlaying && !isTimerStopped)
+        if (!isTimerStopped)
         {
             minigameTimer += Time.deltaTime;
             
@@ -86,9 +87,8 @@ public class FishMinigameManager : MonoBehaviour
                 int minutes = Mathf.FloorToInt(minigameTimer / 60F);
                 int seconds = Mathf.FloorToInt(minigameTimer - minutes * 60);
                 currentTimerText.text = $"{minutes:00}:{seconds:00}";
-                // เพิ่ม Log นี้เพื่อยืนยันว่าเวลากำลังนับและอัปเดต UI
-                Debug.Log($"[FishMinigame] Timer: {currentTimerText.text} (Raw: {minigameTimer:F2})");
-                // Debug.Log($"[FishMinigame] Timer: {currentTimerText.text} (Raw: {minigameTimer:F2})"); // คอมเมนต์ออกเพื่อลดข้อความใน Console
+                // Log ถูกคอมเมนต์ออกเพื่อลดข้อความใน Console และปรับปรุงประสิทธิภาพ
+                // Debug.Log($"[FishMinigame] Timer: {currentTimerText.text} (Raw: {minigameTimer:F2})");
             }
             else
             {
@@ -98,6 +98,31 @@ public class FishMinigameManager : MonoBehaviour
                     Debug.LogWarning("⚠️ [FishMinigame] เวลากำลังเดิน แต่หาช่อง 'Current Timer Text' ไม่เจอ! โปรดลาก UI Text มาใส่ใน Inspector ครับ");
                 }
             }
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Jigsaw Slot Management (Called by JigsawPiece)
+    // ──────────────────────────────────────────────────────────────────────
+
+    public bool TryOccupySlot(RectTransform slot, JigsawPiece piece)
+    {
+        if (slot == null || piece == null) return false;
+        // If slot is occupied by another piece, fail. If it's the same piece, succeed.
+        if (_occupiedSlots.TryGetValue(slot, out JigsawPiece existingPiece))
+        {
+            return existingPiece == piece;
+        }
+        _occupiedSlots[slot] = piece;
+        return true;
+    }
+
+    public void FreeSlot(RectTransform slot, JigsawPiece piece)
+    {
+        // Only remove if the slot is occupied by the piece that is being freed.
+        if (slot != null && _occupiedSlots.ContainsKey(slot) && _occupiedSlots[slot] == piece)
+        {
+            _occupiedSlots.Remove(slot);
         }
     }
 
@@ -185,15 +210,29 @@ public class FishMinigameManager : MonoBehaviour
         if (victoryTimeText == null && victoryPanel != null)
         {
             TMP_Text[] vicTexts = victoryPanel.GetComponentsInChildren<TMP_Text>(true);
+            TMP_Text fallback = null;
             foreach (var txt in vicTexts)
             {
-                if (txt.name.ToLower().Contains("time"))
+                string n = txt.name.ToLower();
+                // หาตัวที่ชื่อมี "time" หรือ "score" ก่อน
+                if (n.Contains("time") || n.Contains("score"))
                 {
                     victoryTimeText = txt;
                     Debug.Log($"[FishMinigameManager] Auto-detect victoryTimeText: '{txt.name}'");
                     break;
                 }
+                // เก็บ fallback = text ตัวแรกที่ไม่ใช่ชื่อ title/ปุ่ม
+                if (fallback == null && !n.Contains("victory") && !n.Contains("play") && !n.Contains("again") && !n.Contains("title"))
+                    fallback = txt;
             }
+            // ถ้าหาชื่อตรงไม่เจอ → ใช้ fallback ตัวแรกที่เหลือ
+            if (victoryTimeText == null && fallback != null)
+            {
+                victoryTimeText = fallback;
+                Debug.Log($"[FishMinigameManager] Auto-detect victoryTimeText (fallback): '{fallback.name}'");
+            }
+            if (victoryTimeText == null)
+                Debug.LogWarning("[FishMinigameManager] ไม่พบ Text สำหรับแสดงเวลาใน Victory Panel — ลาก Assign 'Victory Time Text' ใน Inspector ด้วยครับ");
         }
 
         // ── Auto-detect currentTimerText ───────────────────
@@ -224,11 +263,7 @@ public class FishMinigameManager : MonoBehaviour
     public void StartMinigame(string question, string[] choices, int correctIndex, int fishIndex)
     {
         IsMinigamePlaying = true;
-        
-        minigameTimer = 0f; // เริ่มนับเวลาใหม่จาก 0
-        isTimerStopped = false; // สั่งให้เวลาเดิน
-        
-        if (currentTimerText != null) currentTimerText.gameObject.SetActive(true); // บังคับโชว์บนหน้าจอ
+        // ไม่ reset timer — นับต่อเนื่องจากตอนที่ตัวละครเกิด
 
         isTransitioningToQuiz = false; // Reset transition flag
         wrongAnswerCount = 0; // Reset wrong answer count
@@ -313,6 +348,7 @@ public class FishMinigameManager : MonoBehaviour
         if (quizPanel != null) quizPanel.SetActive(false);
         if (victoryPanel != null) victoryPanel.SetActive(false);
         if (quizJigsawImage != null) quizJigsawImage.gameObject.SetActive(false);
+        if (fishInfoPanel != null) fishInfoPanel.SetActive(false); // ปิด DataName ตอนเปิด Jigsaw
         
         if (jigsawPanel != null) jigsawPanel.SetActive(true);
         else Debug.LogWarning("⚠️ [FishMinigame] หา 'Jigsaw Panel' ไม่เจอ! อย่าลืมลาก UI มาใส่ในสคริปต์บน Player Prefab นะครับ");
@@ -328,42 +364,50 @@ public class FishMinigameManager : MonoBehaviour
             leaveButton.interactable = true;        // บังคับให้ปุ่มกดได้
         }
         if (feedbackText != null) feedbackText.text = "";
+
+        // เคลียร์สถานะ slot ที่ถูกครอบครองทั้งหมดเมื่อเริ่ม Jigsaw Phase
+        _occupiedSlots.Clear();
+        if (jigsawPieces != null)
+        {
+            foreach (var piece in jigsawPieces)
+            {
+                if (piece != null) piece.ResetPiece(); // ResetPiece จะเคลียร์ CurrentSlot ด้วย
+            }
+        }
     }
 
     public void CheckJigsawCompletion()
     {
         if (isTransitioningToQuiz) return; // Prevent multiple calls while transitioning
-        if (jigsawPieces == null || jigsawPieces.Length == 0) return;
+        if (jigsawPieces == null || jigsawPieces.Length == 0)
+        {
+            // No pieces to check, so nothing is complete.
+            if (nextButton != null)
+            {
+                nextButton.interactable = false;
+                nextButton.gameObject.SetActive(false);
+            }
+            return;
+        }
 
-        int validPieceCount = 0;
         int correctCount = 0;
+        int totalPieces = jigsawPieces.Length;
 
         foreach (var piece in jigsawPieces)
         {
-            if (piece == null) continue;
-
-            // ถ้าชิ้นไหนไม่มี targetSlot ให้นับว่าผิด (ไม่ข้ามไป)
-            if (piece.targetSlot == null)
-            {
-                validPieceCount++;
-                // ไม่ increment correctCount → ชิ้นนี้จะทำให้ allCorrect = false
-                continue;
-            }
+            if (piece == null || piece.targetSlot == null) continue;
 
             RectTransform pieceRect = piece.GetComponent<RectTransform>();
             if (pieceRect == null) continue;
 
-            validPieceCount++;
-
             // เช็คว่าชิ้นส่วนถูกวางตรงกับช่องเป้าหมายของมันหรือไม่
             float distance = Vector2.Distance(pieceRect.anchoredPosition, piece.targetSlot.anchoredPosition);
-            if (distance <= 5f) // อนุโลมความคลาดเคลื่อน 5 หน่วย
+            if (distance <= 5f) // อนุโลมความคลาดเคลื่อน 5 หน่วย (pixels)
                 correctCount++;
         }
 
-        // ต้องมีชิ้นที่ valid อย่างน้อย 1 ชิ้น และถูกทุกชิ้น
-        bool allCorrect = validPieceCount > 0 && correctCount == validPieceCount;
-
+        // All pieces must be in their correct places.
+        bool allCorrect = totalPieces > 0 && correctCount == totalPieces;
 
         if (allCorrect)
         {
@@ -397,9 +441,9 @@ public class FishMinigameManager : MonoBehaviour
     {
         if (jigsawPanel != null) jigsawPanel.SetActive(false);
         if (victoryPanel != null) victoryPanel.SetActive(false);
-        
-        isTimerStopped = true; // หยุดนับเวลาเมื่อเข้าสู่หน้า Quiz
-        
+
+        // ไม่หยุดเวลา — นับต่อไปจนกว่าจะตอบ Quiz เสร็จ
+
         if (quizPanel != null) quizPanel.SetActive(true);
         else Debug.LogWarning("⚠️ [FishMinigame] หา 'Quiz Panel' ไม่เจอ! อย่าลืมลาก UI มาใส่ในสคริปต์บน Player Prefab นะครับ");
         
@@ -471,7 +515,7 @@ public class FishMinigameManager : MonoBehaviour
             {
                 int minutes = Mathf.FloorToInt(minigameTimer / 60F);
                 int seconds = Mathf.FloorToInt(minigameTimer - minutes * 60);
-                victoryTimeText.text = $"Time: {minutes:00}:{seconds:00}";
+                victoryTimeText.text = $"{minutes:00}:{seconds:00}";
             }
         }
         else
@@ -492,6 +536,7 @@ public class FishMinigameManager : MonoBehaviour
     private void ResetToJigsawPhase()
     {
         isTimerStopped = false; // ถ้าตอบผิดแล้วกลับมาหน้าจิ๊กซอว์ ให้เดินเวลาต่อ
+        _occupiedSlots.Clear(); // เคลียร์สถานะ slot ที่ถูกครอบครอง
         wrongAnswerCount = 0;
         if (jigsawPieces != null)
         {
@@ -499,7 +544,7 @@ public class FishMinigameManager : MonoBehaviour
             {
                 if (piece != null)
                 {
-                    piece.ResetPiece();
+                    piece.ResetPiece(); // ResetPiece จะเคลียร์ CurrentSlot ด้วย
                     piece.Scatter(jigsawScatterRadius);
                 }
             }
@@ -510,7 +555,7 @@ public class FishMinigameManager : MonoBehaviour
     public void CloseMinigame()
     {
         IsMinigamePlaying = false;
-        isTimerStopped = true;
+        // ไม่หยุดนับเวลา — timer ยังเดินต่อเพื่อวัด session รวม
         if (quizPanel != null) quizPanel.SetActive(false);
         if (jigsawPanel != null) jigsawPanel.SetActive(false);
         if (minigameCanvas != null) minigameCanvas.SetActive(false); // ปิด Canvas หลักทิ้ง เพื่อไม่ให้พื้นหลังค้าง

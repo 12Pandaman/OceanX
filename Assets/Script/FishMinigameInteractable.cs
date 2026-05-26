@@ -41,7 +41,6 @@ public class FishMinigameInteractable : MonoBehaviour
 
     // player ที่อยู่ในระยะ (เฉพาะ owner เท่านั้น)
     private FishCollectionManager nearbyManager = null;
-    private bool alreadyCollectedByAll = false; // ถ้าต้องการ disable หลัง collect ครั้งแรก
     private bool isPanelOpen = false;
     
     // เก็บสถานะว่าปลาตัวนี้ถูกเก็บไปแล้วก่อนที่จะเริ่มการโต้ตอบครั้งนี้หรือไม่
@@ -62,6 +61,25 @@ public class FishMinigameInteractable : MonoBehaviour
     {
         // ตรวจ E key กด — ทำงานเมื่อมี player owner อยู่ใกล้
         if (nearbyManager == null) return;
+
+        // ถ้า minigame (jigsaw/quiz/victory) กำลังแสดงอยู่ ให้ซ่อน prompt และไม่ทำอะไรเลย
+        if (nearbyManager.MinigameManager != null && nearbyManager.MinigameManager.IsMinigamePlaying)
+        {
+            if (worldPressEPrompt != null && worldPressEPrompt.activeSelf)
+            {
+                worldPressEPrompt.SetActive(false);
+            }
+            nearbyManager.ShowPressEHint(false);
+
+            // ถ้า panel ข้อมูลปลาเปิดค้างอยู่ ให้ปิดด้วย
+            if (isPanelOpen)
+            {
+                nearbyManager.MinigameManager.HideFishInfo();
+                isPanelOpen = false;
+            }
+            return;
+        }
+
         if (!Input.GetKeyDown(KeyCode.E)) return;
 
         FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
@@ -133,21 +151,30 @@ public class FishMinigameInteractable : MonoBehaviour
         FishCollectionManager mgr = GetOwnerManager(other);
         if (mgr == null) return;
 
-        // ปลาตัวนี้ถูกเก็บไปแล้วโดย player นี้ → ไม่ต้อง show hint
-        if (mgr.IsCollected(fishIndex)) return;
+        // ถ้า minigame (jigsaw/quiz/victory) กำลังแสดงอยู่ ไม่ต้องแสดง prompt
+        if (mgr.MinigameManager != null && mgr.MinigameManager.IsMinigamePlaying)
+        {
+            // nearbyManager จะยังคงเป็น null และ Update() จะไม่ทำงาน
+            return;
+        }
 
         // เก็บสถานะการเก็บปลาไว้ก่อนเริ่มการโต้ตอบ
         wasCollectedBeforeInteraction = mgr.IsCollected(fishIndex);
 
         nearbyManager = mgr;
 
-        // แสดง "Press E" บน world
+        // แสดง "Press E" บน world และ HUD เสมอ เพื่อให้ผู้เล่นสามารถอ่านข้อมูลซ้ำได้
         if (worldPressEPrompt != null) worldPressEPrompt.SetActive(true);
-
-        // แสดง "Press E" บน player HUD
         mgr.ShowPressEHint(true);
 
-        Debug.Log($"[FishMinigameInteractable] Player เข้าใกล้ปลา #{fishIndex} — กด E เพื่ออ่านข้อมูล");
+        if (wasCollectedBeforeInteraction)
+        {
+            Debug.Log($"[FishMinigameInteractable] Player เข้าใกล้ปลา #{fishIndex} (เก็บไปแล้ว) — กด E เพื่ออ่านข้อมูลซ้ำ");
+        }
+        else
+        {
+            Debug.Log($"[FishMinigameInteractable] Player เข้าใกล้ปลา #{fishIndex} — กด E เพื่ออ่านข้อมูล");
+        }
     }
 
     void OnTriggerExit(Collider other)

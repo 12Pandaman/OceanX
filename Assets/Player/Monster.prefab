@@ -838,7 +838,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 0, y: 0}
-  m_AnchoredPosition: {x: -405, y: -163}
+  m_AnchoredPosition: {x: 206, y: 157}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &7559347068595134389
@@ -1537,7 +1537,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 241.01048, y: 163.25}
+  m_AnchoredPosition: {x: 222, y: 173}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &3118082407425029852
@@ -1654,7 +1654,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &3848165553959251541
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4840,10 +4840,10 @@ RectTransform:
   - {fileID: 4654259337083022524}
   m_Father: {fileID: 4539245856799328437}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.5}
-  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchorMin: {x: 0, y: 0}
+  m_AnchorMax: {x: 1, y: 1}
   m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 100, y: 100}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!1 &6331703683345104530
 GameObject:
@@ -5431,7 +5431,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 241.01048, y: 133.43597}
+  m_AnchoredPosition: {x: 221.99997, y: 143.18597}
   m_SizeDelta: {x: 200, y: 50}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &1971690475394979503
@@ -7430,7 +7430,7 @@ MonoBehaviour:
   quizPanel: {fileID: 7290419191221890488}
   jigsawPanel: {fileID: 476435158120234249}
   victoryPanel: {fileID: 5642445549287394185}
-  victoryTimeText: {fileID: 606964548562587097}
+  victoryTimeText: {fileID: 6029757169911596751}
   victoryRestartButton: {fileID: 3975368433263550086}
   currentTimerText: {fileID: 606964548562587097}
   questionText: {fileID: 8004982793595011848}
