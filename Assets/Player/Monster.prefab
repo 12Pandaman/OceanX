@@ -5860,7 +5860,7 @@ MonoBehaviour:
   - {fileID: 8135389575906449880}
   - {fileID: 5947986709166352916}
   - {fileID: 710230881011497269}
-  lockedColor: {r: 0.25, g: 0.5, b: 0.85, a: 1}
+  lockedColor: {r: 0.12237451, g: 0.4529746, b: 0.5896226, a: 1}
   unlockedColor: {r: 1, g: 1, b: 1, a: 1}
   pressEHint: {fileID: 1456553464913071140}
   finalQuestion: Which fish did you find?
