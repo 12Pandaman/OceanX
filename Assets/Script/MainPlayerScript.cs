@@ -643,11 +643,11 @@ public class MainPlayerScript : NetworkBehaviour
                 rb.useGravity = false;
             }
             
-            // Underwater fog effect
-            RenderSettings.fog = true;
-            RenderSettings.fogColor = new Color(0.1f, 0.4f, 0.7f, 0.6f);
-            RenderSettings.fogDensity = 0.05f;
-            RenderSettings.fogMode = FogMode.Exponential;
+            // Underwater fog effect (ปิดไว้ — เปิดถ้าต้องการ)
+            // RenderSettings.fog = true;
+            // RenderSettings.fogColor = new Color(0.1f, 0.4f, 0.7f, 0.6f);
+            // RenderSettings.fogDensity = 0.05f;
+            // RenderSettings.fogMode = FogMode.Exponential;
         }
     }
 

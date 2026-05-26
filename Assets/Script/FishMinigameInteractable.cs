@@ -127,17 +127,29 @@ public class FishMinigameInteractable : MonoBehaviour
             NetworkFish netFish = GetComponent<NetworkFish>();
             if (netFish != null) netFish.isPaused = false;
 
-            // ถ้าปลาตัวนี้ยังไม่ถูกเก็บก่อนหน้านี้ (หมายถึงเพิ่งถูกเก็บไปตอนกด E ครั้งแรก)
-            // ให้หยุดการโต้ตอบกับปลาตัวนี้
-            if (!wasCollectedBeforeInteraction)
+            // ตรวจสอบว่าปลาครบ 3 ตัวหรือยัง *หลังจาก* ปิด panel
+            // และปลาตัวนี้คือตัวที่เพิ่งเก็บไป (ไม่ใช่การอ่านซ้ำ)
+            if (!wasCollectedBeforeInteraction && nearbyManager.AreAllFishCollected())
             {
-                nearbyManager = null; // ปิดการตรวจจับเลย
+                // ถ้าใช่, ให้เริ่มมินิเกมสุดท้าย
+                Debug.Log($"[FishMinigameInteractable] Closed info for fish #{fishIndex}. All fish collected. Starting final minigame.");
+                nearbyManager.StartFinalMinigame();
+                // ไม่ต้องทำอะไรต่อ เพราะ minigame manager จะ take over
             }
             else
             {
-                // ถ้าเก็บไปแล้ว แต่แค่อ่านซ้ำ ก็โชว์ Press E คืนมา
-                if (worldPressEPrompt != null) worldPressEPrompt.SetActive(true);
-                nearbyManager.ShowPressEHint(true);
+                // ถ้ายังไม่ครบ 3 ตัว หรือเป็นการอ่านข้อมูลซ้ำ
+                if (!wasCollectedBeforeInteraction)
+                {
+                    // ปลาตัวนี้เพิ่งถูกเก็บ (แต่ยังไม่ครบ 3) -> หยุดการโต้ตอบ
+                    nearbyManager = null;
+                }
+                else
+                {
+                    // อ่านข้อมูลซ้ำ -> แสดง "Press E" คืนมา
+                    if (worldPressEPrompt != null) worldPressEPrompt.SetActive(true);
+                    nearbyManager.ShowPressEHint(true);
+                }
             }
         }
     }

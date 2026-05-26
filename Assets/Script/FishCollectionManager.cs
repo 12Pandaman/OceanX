@@ -79,10 +79,10 @@ public class FishCollectionManager : MonoBehaviour
         collectedCount++;
         Debug.Log($"[FishCollection] เก็บปลา #{fishIndex} ✓  รวม {collectedCount}/3");
 
-        if (collectedCount >= 3 && !allCollected)
+        if (collectedCount >= 3)
         {
             allCollected = true;
-            StartFinalMinigame();
+            Debug.Log("[FishCollection] ปลาครบ 3 ตัวแล้ว! รอการยืนยันเพื่อเริ่มมินิเกมสุดท้าย...");
         }
     }
 
@@ -90,6 +90,11 @@ public class FishCollectionManager : MonoBehaviour
     {
         if (fishIndex < 0 || fishIndex >= 3) return false;
         return collected[fishIndex];
+    }
+
+    public bool AreAllFishCollected()
+    {
+        return allCollected;
     }
 
     public void ShowPressEHint(bool show)
@@ -110,7 +115,7 @@ public class FishCollectionManager : MonoBehaviour
     // Private
     // ──────────────────────────────────────────────────────────────────────
 
-    void StartFinalMinigame()
+    public void StartFinalMinigame()
     {
         Debug.Log("[FishCollection] 🐟🐟🐟 ครบ 3 ตัว! เปิด Jigsaw + Quiz...");
 
