@@ -35,6 +35,12 @@ public class FishCollectionManager : MonoBehaviour
         _manager = GetComponentInChildren<FishMinigameManager>(true);
         _visual  = GetComponentInChildren<FishJigsawVisual>(true);
 
+        // Ensure fishIcons array is not null, even if empty, to prevent NREs later
+        if (fishIcons == null)
+        {
+            fishIcons = new Image[0]; // Initialize as an empty array if not assigned
+            Debug.LogWarning("[FishCollectionManager] 'fishIcons' array was null and has been initialized as empty. Please assign Image elements in the Inspector.");
+        }
         // ตั้ง icon ทุกอันเป็นสีน้ำเงินก่อน
         SetAllIconsLocked();
         if (pressEHint != null) pressEHint.SetActive(false);
@@ -56,9 +62,19 @@ public class FishCollectionManager : MonoBehaviour
         if (fishIcons != null && collectedCount < fishIcons.Length)
         {
             if (fishIcons[collectedCount] != null)
+            {
                 fishIcons[collectedCount].color = unlockedColor;
+                Debug.Log($"[FishCollection] Icon for collected fish #{fishIndex} (slot {collectedCount}) updated to unlocked color.");
+            }
+            else
+            {
+                Debug.LogWarning($"[FishCollection] fishIcons[{collectedCount}] is null! Cannot update icon for fish #{fishIndex}. Please check Inspector assignments.");
+            }
         }
-
+        else if (fishIcons == null)
+        {
+            Debug.LogWarning($"[FishCollection] fishIcons array is null! Cannot update icon for fish #{fishIndex}. Please check Inspector assignments.");
+        }
         collectedCount++;
         Debug.Log($"[FishCollection] เก็บปลา #{fishIndex} ✓  รวม {collectedCount}/3");
 

@@ -5,7 +5,7 @@ using Unity.Netcode;
 public class MainPlayerScript : NetworkBehaviour
 {
     [Header("Movement")]
-    public float moveSpeed = 5f;
+    [SerializeField] private float moveSpeed = 2f;
     public float sprintSpeed = 10f;
     public float jumpForce = 5f;
     public float groundCheckDistance = 1.1f;
@@ -323,7 +323,7 @@ public class MainPlayerScript : NetworkBehaviour
                     FishMinigameInteractable interactable = hit.collider.GetComponentInParent<FishMinigameInteractable>();
                     if (interactable != null)
                     {
-                        interactable.StartMinigame(minigameManager);
+                        // FishMinigameInteractable จะจัดการการกด 'E' ด้วยตัวเองผ่านเมธอด Update() ของมัน
                         break; // เจอเป้าหมายแล้วหยุดค้นหา
                     }
                 }

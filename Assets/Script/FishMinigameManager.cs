@@ -86,6 +86,17 @@ public class FishMinigameManager : MonoBehaviour
                 int minutes = Mathf.FloorToInt(minigameTimer / 60F);
                 int seconds = Mathf.FloorToInt(minigameTimer - minutes * 60);
                 currentTimerText.text = $"{minutes:00}:{seconds:00}";
+                // เพิ่ม Log นี้เพื่อยืนยันว่าเวลากำลังนับและอัปเดต UI
+                Debug.Log($"[FishMinigame] Timer: {currentTimerText.text} (Raw: {minigameTimer:F2})");
+                // Debug.Log($"[FishMinigame] Timer: {currentTimerText.text} (Raw: {minigameTimer:F2})"); // คอมเมนต์ออกเพื่อลดข้อความใน Console
+            }
+            else
+            {
+                // แจ้งเตือนเพื่อให้รู้ว่าช่อง Current Timer Text ว่างอยู่
+                if (Time.frameCount % 60 == 0)
+                {
+                    Debug.LogWarning("⚠️ [FishMinigame] เวลากำลังเดิน แต่หาช่อง 'Current Timer Text' ไม่เจอ! โปรดลาก UI Text มาใส่ใน Inspector ครับ");
+                }
             }
         }
     }
@@ -170,6 +181,39 @@ public class FishMinigameManager : MonoBehaviour
             }
         }
 
+        // ── Auto-detect victoryTimeText ───────────────────
+        if (victoryTimeText == null && victoryPanel != null)
+        {
+            TMP_Text[] vicTexts = victoryPanel.GetComponentsInChildren<TMP_Text>(true);
+            foreach (var txt in vicTexts)
+            {
+                if (txt.name.ToLower().Contains("time"))
+                {
+                    victoryTimeText = txt;
+                    Debug.Log($"[FishMinigameManager] Auto-detect victoryTimeText: '{txt.name}'");
+                    break;
+                }
+            }
+        }
+
+        // ── Auto-detect currentTimerText ───────────────────
+        if (currentTimerText == null && minigameCanvas != null)
+        {
+            TMP_Text[] allTexts = minigameCanvas.GetComponentsInChildren<TMP_Text>(true);
+            foreach (var txt in allTexts)
+            {
+                string n = txt.name.ToLower();
+                if ((n.Contains("timer") || n.Contains("time")) && (victoryTimeText == null || txt != victoryTimeText) && (victoryPanel == null || !txt.transform.IsChildOf(victoryPanel.transform)))
+                {
+                    currentTimerText = txt;
+                    Debug.Log($"[FishMinigameManager] Auto-detect currentTimerText: '{txt.name}'");
+                    break;
+                }
+            }
+        }
+        if (currentTimerText == null)
+            Debug.LogWarning("[FishMinigameManager] ไม่พบ Text สำหรับจับเวลา — ลาก Assign 'Current Timer Text' ใน Inspector ด้วยครับ");
+
         if (leaveButton != null)
         {
             leaveButton.onClick.RemoveAllListeners();
@@ -183,6 +227,8 @@ public class FishMinigameManager : MonoBehaviour
         
         minigameTimer = 0f; // เริ่มนับเวลาใหม่จาก 0
         isTimerStopped = false; // สั่งให้เวลาเดิน
+        
+        if (currentTimerText != null) currentTimerText.gameObject.SetActive(true); // บังคับโชว์บนหน้าจอ
 
         isTransitioningToQuiz = false; // Reset transition flag
         wrongAnswerCount = 0; // Reset wrong answer count

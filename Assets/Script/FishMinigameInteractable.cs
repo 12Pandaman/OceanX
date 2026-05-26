@@ -43,6 +43,9 @@ public class FishMinigameInteractable : MonoBehaviour
     private FishCollectionManager nearbyManager = null;
     private bool alreadyCollectedByAll = false; // ถ้าต้องการ disable หลัง collect ครั้งแรก
     private bool isPanelOpen = false;
+    
+    // เก็บสถานะว่าปลาตัวนี้ถูกเก็บไปแล้วก่อนที่จะเริ่มการโต้ตอบครั้งนี้หรือไม่
+    private bool wasCollectedBeforeInteraction = false;
 
     // ──────────────────────────────────────────────────────────────────────
     // Unity Lifecycle
@@ -64,6 +67,9 @@ public class FishMinigameInteractable : MonoBehaviour
         FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
         if (minigameMgr == null) return;
 
+        // ตรวจสอบสถานะการเก็บปลา ณ ตอนที่กด E ครั้งแรก
+        // (ถ้ากด E ครั้งแรกเพื่อเปิด panel, wasCollectedBeforeInteraction จะถูกตั้งค่าใน OnTriggerEnter)
+
         if (!isPanelOpen)
         {
             // เปิด Panel ข้อมูลปลา
@@ -77,6 +83,12 @@ public class FishMinigameInteractable : MonoBehaviour
             }
             isPanelOpen = true;
 
+            // เก็บปลาทันทีที่เปิด Panel (ถ้ายังไม่เคยเก็บ)
+            nearbyManager.CollectFish(fishIndex);
+            // แสดง effect การเก็บทันที (ถ้ายังไม่เคยแสดง)
+            if (!wasCollectedBeforeInteraction && collectedEffect != null)
+                collectedEffect.SetActive(true);
+
             // หยุดปลาไม่ให้ว่ายหนี
             NetworkFish netFish = GetComponent<NetworkFish>();
             if (netFish != null) netFish.isPaused = true;
@@ -84,6 +96,8 @@ public class FishMinigameInteractable : MonoBehaviour
             // ซ่อน "Press E" ไปก่อน
             if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
             nearbyManager.ShowPressEHint(false);
+
+            Debug.Log($"[FishMinigameInteractable] Opened info for fish #{fishIndex} and collected it (if not already).");
         }
         else
         {
@@ -95,11 +109,10 @@ public class FishMinigameInteractable : MonoBehaviour
             NetworkFish netFish = GetComponent<NetworkFish>();
             if (netFish != null) netFish.isPaused = false;
 
-            // พอกดปิดให้ถือว่าเป็นการ "เก็บ" ด้วยเลย ถ้ายังไม่ได้เก็บ
-            if (!nearbyManager.IsCollected(fishIndex))
+            // ถ้าปลาตัวนี้ยังไม่ถูกเก็บก่อนหน้านี้ (หมายถึงเพิ่งถูกเก็บไปตอนกด E ครั้งแรก)
+            // ให้หยุดการโต้ตอบกับปลาตัวนี้
+            if (!wasCollectedBeforeInteraction)
             {
-                nearbyManager.CollectFish(fishIndex);
-                if (collectedEffect != null) collectedEffect.SetActive(true);
                 nearbyManager = null; // ปิดการตรวจจับเลย
             }
             else
@@ -122,6 +135,9 @@ public class FishMinigameInteractable : MonoBehaviour
 
         // ปลาตัวนี้ถูกเก็บไปแล้วโดย player นี้ → ไม่ต้อง show hint
         if (mgr.IsCollected(fishIndex)) return;
+
+        // เก็บสถานะการเก็บปลาไว้ก่อนเริ่มการโต้ตอบ
+        wasCollectedBeforeInteraction = mgr.IsCollected(fishIndex);
 
         nearbyManager = mgr;
 
@@ -155,34 +171,6 @@ public class FishMinigameInteractable : MonoBehaviour
 
         if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
         mgr.ShowPressEHint(false);
-    }
-
-    // ──────────────────────────────────────────────────────────────────────
-    // Collect Logic
-    // ──────────────────────────────────────────────────────────────────────
-
-    void TryCollect(FishCollectionManager mgr)
-    {
-        if (mgr.IsCollected(fishIndex))
-        {
-            // เก็บไปแล้ว — ซ่อน hint
-            if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
-            mgr.ShowPressEHint(false);
-            nearbyManager = null;
-            return;
-        }
-
-        // ── เก็บปลา ──────────────────────────────────────────────────────
-        mgr.CollectFish(fishIndex);
-
-        // ซ่อน hints
-        if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
-        mgr.ShowPressEHint(false);
-
-        // แสดง collected effect
-        if (collectedEffect != null) collectedEffect.SetActive(true);
-
-        nearbyManager = null; // ออกจาก state รอ
     }
 
     // ──────────────────────────────────────────────────────────────────────
