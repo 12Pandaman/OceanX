@@ -38,7 +38,7 @@ public class FishMinigameInteractable : MonoBehaviour
 
     // player ที่อยู่ในระยะ (เฉพาะ owner เท่านั้น)
     private FishCollectionManager nearbyManager = null;
-    private bool alreadyCollectedByAll = false; // ถ้าต้องการ disable หลัง collect ครั้งแรก
+    // ลบออกหรือเชื่อมต่อกับระบบ ServerRpc ทีหลังถ้าต้องการ sync การเก็บแบบ global
 
     // ──────────────────────────────────────────────────────────────────────
     // Unity Lifecycle

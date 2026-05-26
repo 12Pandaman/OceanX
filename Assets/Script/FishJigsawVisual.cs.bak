@@ -1,0 +1,328 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.UI;
+
+/// <summary>
+/// ใส่รูปปลาลงบน Piece1-9 ที่มีอยู่แล้วใน JigsawPanel ของ Player Prefab
+/// (เวอร์ชันสับสลับแบบสุ่ม + animate reveal)
+///
+/// วิธีใช้:
+///   1. Attach script นี้บน JigsawPanel (หรือ Object เดียวกับ FishMinigameManager)
+///   2. ลาก Piece1-9 ใส่ช่อง pieces[] ใน Inspector
+///   3. ลากรูปปลา 3 รูป ใส่ช่อง fishTextures[] ใน Inspector
+///   4. FishMinigameInteractable จะเรียก ShowFish(fishIndex) อัตโนมัติ
+/// </summary>
+public class FishJigsawVisual : MonoBehaviour
+{
+    [Header("Piece ทั้ง 9 — ลาก Piece1 ถึง Piece9 ตามลำดับ")]
+    [Tooltip("ลาก Piece1, Piece2, ... Piece9 จาก JigsawPanel มาใส่ตามลำดับ")]
+    public RectTransform[] pieces; // ขนาด 9
+
+    [Header("รูปปลา 3 ตัว — index ต้องตรงกับ FishMinigameInteractable")]
+    [Tooltip("[0]=ปลาตัวที่ 1, [1]=ปลาตัวที่ 2, [2]=ปลาตัวที่ 3")]
+    public Texture2D[] fishTextures; // ขนาด 3
+
+    [Header("Grid (ต้องตรงกับ Slot layout)")]
+    public int rows = 3;
+    public int cols = 3;
+
+    [Header("Options")]
+    [Tooltip("ซ่อนตัวเลข Text(TMP) บน piece เมื่อแสดงรูปปลา")]
+    public bool hideNumberText = true;
+
+    [Header("Shuffle & Reveal")]
+    [Tooltip("สับสลับชิ้นจิ๊กซอแบบสุ่มเมื่อเปิดมินิเกม")]
+    public bool shufflePieces = true;
+
+    [Tooltip("จำนวนรอบ Fisher-Yates ขั้นต่ำ (ยิ่งมาก ยิ่งสับเยอะ)")]
+    [Range(1, 5)]
+    public int shufflePasses = 2;
+
+    [Tooltip("เปิด Coroutine reveal — ชิ้นโผล่ทีละอันแทนที่จะโผล่พร้อมกัน")]
+    public bool animatedReveal = true;
+
+    [Tooltip("หน่วงเวลาระหว่างแต่ละชิ้นที่โผล่ขึ้นมา (วินาที)")]
+    [Range(0.02f, 0.5f)]
+    public float revealInterval = 0.08f;
+
+    [Tooltip("ระยะเวลา fade-in ของแต่ละชิ้น (วินาที)")]
+    [Range(0.05f, 0.5f)]
+    public float fadeInDuration = 0.15f;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Internal State
+    // ──────────────────────────────────────────────────────────────────────
+
+    // shuffledUVOrder[i] = index ของ UV slice ที่ piece[i] ได้รับ
+    // ใช้ตรวจสอบว่า piece[i] อยู่ "ถูกที่" หรือยัง
+    private int[] _shuffledUVOrder;
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Public API — เรียกจาก FishMinigameInteractable / Manager
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// แสดงรูปปลาบน piece ทั้ง 9 อัน (สับสลับหรือไม่ก็ได้ ตาม shufflePieces)
+    /// fishIndex = 0/1/2 ตาม fishTextures[]
+    /// </summary>
+    public void ShowFish(int fishIndex)
+    {
+        if (fishTextures == null || fishIndex < 0 || fishIndex >= fishTextures.Length)
+        {
+            Debug.LogWarning($"[FishJigsawVisual] fishIndex={fishIndex} ไม่มีใน fishTextures! ใส่รูปปลาให้ครบก่อน");
+            return;
+        }
+
+        Texture2D tex = fishTextures[fishIndex];
+        if (tex == null)
+        {
+            Debug.LogWarning($"[FishJigsawVisual] fishTextures[{fishIndex}] เป็น null!");
+            return;
+        }
+
+        // สร้าง / สับ UV order
+        _shuffledUVOrder = BuildUVOrder(pieces.Length);
+
+        if (animatedReveal)
+            StartCoroutine(RevealPiecesCoroutine(tex));
+        else
+            ApplyAllPieces(tex);
+
+        Debug.Log($"[FishJigsawVisual] แสดงปลา index={fishIndex} ('{tex.name}') บน {pieces.Length} ชิ้น" +
+                  (shufflePieces ? " [SHUFFLED]" : "") + " ✓");
+    }
+
+    /// <summary>
+    /// ซ่อนรูปปลาทั้งหมด + คืน text number
+    /// เรียกจาก FishMinigameManager.CloseMinigame()
+    /// </summary>
+    public void HideFishImages()
+    {
+        StopAllCoroutines();
+
+        foreach (var piece in pieces)
+        {
+            if (piece == null) continue;
+
+            Transform fishImgTf = piece.Find("FishImage");
+            if (fishImgTf != null)
+            {
+                RawImage ri = fishImgTf.GetComponent<RawImage>();
+                if (ri != null) ri.enabled = false;
+            }
+
+            SetNumberTextVisible(piece, true);
+        }
+    }
+
+    /// <summary>
+    /// ตรวจสอบว่า piece[pieceIndex] ถือ UV slice ที่ถูกต้องหรือยัง
+    /// ใช้กับระบบ drag-and-drop swap เพื่อเช็กว่าปริศนาสำเร็จ
+    /// คืน true เมื่อชิ้นนั้นอยู่ถูกที่
+    /// </summary>
+    public bool IsPieceCorrect(int pieceIndex)
+    {
+        if (_shuffledUVOrder == null || pieceIndex < 0 || pieceIndex >= _shuffledUVOrder.Length)
+            return false;
+        return _shuffledUVOrder[pieceIndex] == pieceIndex;
+    }
+
+    /// <summary>
+    /// คืน true เมื่อทุกชิ้นอยู่ถูกที่ (ปริศนาสำเร็จ!)
+    /// </summary>
+    public bool IsSolved()
+    {
+        if (_shuffledUVOrder == null) return false;
+        for (int i = 0; i < _shuffledUVOrder.Length; i++)
+            if (_shuffledUVOrder[i] != i) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Swap UV ของ piece[a] กับ piece[b] (สำหรับระบบ drag-and-drop)
+    /// แล้ว refresh รูปให้ถูกต้อง
+    /// </summary>
+    public void SwapPieces(int a, int b, Texture2D tex)
+    {
+        if (_shuffledUVOrder == null) return;
+        if (a < 0 || a >= pieces.Length || b < 0 || b >= pieces.Length) return;
+
+        // สลับ UV order
+        (_shuffledUVOrder[a], _shuffledUVOrder[b]) = (_shuffledUVOrder[b], _shuffledUVOrder[a]);
+
+        // อัปเดตรูป 2 ชิ้น
+        ApplyPiece(a, tex);
+        ApplyPiece(b, tex);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Shuffle Logic
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// สร้าง UV order ที่สับสลับ (Fisher-Yates) หรือตามลำดับปกติ
+    /// รับประกันว่าถ้า shufflePieces=true จะสับได้ผลลัพธ์ที่ต่างจากลำดับเดิมเสมอ
+    /// </summary>
+    private int[] BuildUVOrder(int count)
+    {
+        int[] order = new int[count];
+        for (int i = 0; i < count; i++) order[i] = i;
+
+        if (!shufflePieces) return order;
+
+        // Fisher-Yates shuffle หลายรอบตาม shufflePasses
+        for (int pass = 0; pass < shufflePasses; pass++)
+        {
+            for (int i = count - 1; i > 0; i--)
+            {
+                int j = Random.Range(0, i + 1);
+                (order[i], order[j]) = (order[j], order[i]);
+            }
+        }
+
+        // Safety: ถ้าสลับได้เหมือนเดิมทุกตัว (โอกาสน้อยมาก) ให้สลับ 2 ชิ้นแรก
+        bool allSame = true;
+        for (int i = 0; i < count; i++)
+            if (order[i] != i) { allSame = false; break; }
+
+        if (allSame && count >= 2)
+            (order[0], order[1]) = (order[1], order[0]);
+
+        return order;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Apply Logic
+    // ──────────────────────────────────────────────────────────────────────
+
+    private void ApplyAllPieces(Texture2D tex)
+    {
+        for (int i = 0; i < pieces.Length; i++)
+            ApplyPiece(i, tex);
+    }
+
+    /// <summary>ใส่ UV ที่ถูกต้อง (จาก _shuffledUVOrder) ลง piece[index]</summary>
+    private void ApplyPiece(int index, Texture2D tex)
+    {
+        if (index < 0 || index >= pieces.Length || pieces[index] == null) return;
+
+        int uvSlot = _shuffledUVOrder[index];
+        int r = uvSlot / cols;
+        int c = uvSlot % cols;
+
+        RawImage rawImg = GetOrCreateFishImage(pieces[index]);
+        rawImg.texture = tex;
+        rawImg.enabled = true;
+        rawImg.uvRect  = new Rect(
+            (float)c / cols,
+            (float)(rows - 1 - r) / rows,  // UV Y flip
+            1f / cols,
+            1f / rows
+        );
+
+        SetNumberTextVisible(pieces[index], !hideNumberText);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Animated Reveal Coroutine
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// ชิ้นโผล่ทีละอันพร้อม fade-in ตามลำดับสุ่ม — ให้ความรู้สึก "กระเจิง"
+    /// </summary>
+    private IEnumerator RevealPiecesCoroutine(Texture2D tex)
+    {
+        // สุ่มลำดับที่โผล่
+        int[] revealOrder = BuildRevealOrder(pieces.Length);
+
+        // ซ่อนทุกชิ้นก่อน แต่ assign UV ไว้รอ
+        for (int i = 0; i < pieces.Length; i++)
+        {
+            if (pieces[i] == null) continue;
+            RawImage ri = GetOrCreateFishImage(pieces[i]);
+            ri.color   = new Color(1f, 1f, 1f, 0f); // โปร่งใสก่อน
+            ri.enabled = true;
+
+            int uvSlot = _shuffledUVOrder[i];
+            int r = uvSlot / cols;
+            int c = uvSlot % cols;
+            ri.texture = tex;
+            ri.uvRect  = new Rect(
+                (float)c / cols,
+                (float)(rows - 1 - r) / rows,
+                1f / cols,
+                1f / rows
+            );
+
+            SetNumberTextVisible(pieces[i], !hideNumberText);
+        }
+
+        // โผล่ทีละชิ้นพร้อม fade
+        foreach (int idx in revealOrder)
+        {
+            if (pieces[idx] == null) continue;
+            RawImage ri = GetOrCreateFishImage(pieces[idx]);
+            StartCoroutine(FadeIn(ri, fadeInDuration));
+            yield return new WaitForSeconds(revealInterval);
+        }
+    }
+
+    /// <summary>สุ่มลำดับการโผล่ของชิ้นจิ๊กซอ</summary>
+    private int[] BuildRevealOrder(int count)
+    {
+        int[] order = new int[count];
+        for (int i = 0; i < count; i++) order[i] = i;
+        for (int i = count - 1; i > 0; i--)
+        {
+            int j = Random.Range(0, i + 1);
+            (order[i], order[j]) = (order[j], order[i]);
+        }
+        return order;
+    }
+
+    private IEnumerator FadeIn(RawImage ri, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            float alpha = Mathf.Clamp01(elapsed / duration);
+            ri.color = new Color(1f, 1f, 1f, alpha);
+            yield return null;
+        }
+        ri.color = Color.white;
+    }
+
+    // ──────────────────────────────────────────────────────────────────────
+    // Private Helpers
+    // ──────────────────────────────────────────────────────────────────────
+
+    /// <summary>หาหรือสร้าง child RawImage ชื่อ "FishImage" บน piece</summary>
+    private RawImage GetOrCreateFishImage(RectTransform piece)
+    {
+        Transform existing = piece.Find("FishImage");
+        if (existing != null)
+            return existing.GetComponent<RawImage>();
+
+        GameObject go = new GameObject("FishImage");
+        go.transform.SetParent(piece, false);
+
+        RectTransform rt = go.AddComponent<RectTransform>();
+        rt.anchorMin = Vector2.zero;
+        rt.anchorMax = Vector2.one;
+        rt.offsetMin = Vector2.zero;
+        rt.offsetMax = Vector2.zero;
+
+        go.transform.SetSiblingIndex(0); // วางไว้หลัง Text
+
+        return go.AddComponent<RawImage>();
+    }
+
+    /// <summary>ซ่อน/แสดง TextMeshPro ที่อยู่บน piece</summary>
+    private void SetNumberTextVisible(RectTransform piece, bool visible)
+    {
+        var tmp = piece.GetComponentInChildren<TMPro.TextMeshProUGUI>(true);
+        if (tmp != null) tmp.gameObject.SetActive(visible);
+    }
+}

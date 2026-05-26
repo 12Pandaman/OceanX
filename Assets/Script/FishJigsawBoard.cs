@@ -16,9 +16,9 @@ public class FishJigsawBoard : MonoBehaviour
     // Inspector Fields
     // ──────────────────────────────────────────
 
-    [Header("Fish Image (1 รูปต่อ 1 Board)")]
-    [Tooltip("ใส่รูปปลาตรงนี้ — แต่ละ FishJigsawBoard ใส่รูปคนละอัน")]
-    public Texture2D fishTexture;
+    [Header("Fish Images")]
+    [Tooltip("ใส่รูปปลาหลายๆ รูปตรงนี้ ระบบจะสุ่มเลือกมา 1 รูปตอนสร้างจิ๊กซอว์")]
+    public Texture2D[] fishTextures;
 
     [Header("ขนาด Grid")]
     public int rows = 3;
@@ -75,9 +75,9 @@ public class FishJigsawBoard : MonoBehaviour
     /// </summary>
     public void GeneratePuzzle()
     {
-        if (fishTexture == null)
+        if (fishTextures == null || fishTextures.Length == 0)
         {
-            Debug.LogWarning($"[FishJigsawBoard] '{name}' : ยังไม่ได้ใส่ fishTexture!");
+            Debug.LogWarning($"[FishJigsawBoard] '{name}' : ยังไม่ได้ใส่ fishTextures!");
             return;
         }
 
@@ -95,6 +95,9 @@ public class FishJigsawBoard : MonoBehaviour
         allJigsawSlots = new RectTransform[total];
         jigsawPieces   = new JigsawPiece[total];
         puzzleComplete = false;
+        
+        // สุ่มเลือกรูปปลาจาก Array
+        Texture2D selectedTexture = fishTextures[Random.Range(0, fishTextures.Length)];
 
         // คำนวณ offset เพื่อ center grid
         Vector2 gridOffset = new Vector2(
@@ -136,7 +139,7 @@ public class FishJigsawBoard : MonoBehaviour
 
                 // RawImage แสดงส่วนของรูปปลาที่ถูกต้อง
                 RawImage rawImg = pieceGO.AddComponent<RawImage>();
-                rawImg.texture = fishTexture;
+                rawImg.texture = selectedTexture;
 
                 // คำนวณ UV rect — แต่ละชิ้นเห็นเฉพาะส่วนของตัวเอง
                 // UV origin อยู่ที่ bottom-left  →  ต้อง flip แกน Y

@@ -37,6 +37,20 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
             originalPosition = rectTransform.anchoredPosition;
             currentStartPosition = originalPosition;
         }
+
+        // Auto-detect targetSlot จาก sibling ถ้ายังไม่ได้ set ใน Inspector
+        // (ใน Hierarchy: Slot 1, Piece1, Slot 2, Piece2 ... → sibling บนเสมอคือ slot ของมัน)
+        if (targetSlot == null)
+        {
+            int siblingIndex = transform.GetSiblingIndex();
+            if (siblingIndex > 0)
+            {
+                Transform sibling = transform.parent.GetChild(siblingIndex - 1);
+                RectTransform candidate = sibling.GetComponent<RectTransform>();
+                if (candidate != null && sibling.GetComponent<JigsawPiece>() == null)
+                    targetSlot = candidate;
+            }
+        }
     }
 
     public void OnBeginDrag(PointerEventData eventData)
@@ -60,32 +74,31 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
 
-        if (targetSlot == null) return;
+        // ─── snap เฉพาะ targetSlot ของตัวเอง ────────────────────────────────────
+        // ไม่ snap ไปช่องอื่น เพื่อให้ CheckJigsawCompletion ทำงานถูกต้อง
+        if (targetSlot == null)
+        {
+            rectTransform.anchoredPosition = currentStartPosition;
+        }
+        else
+        {
+            float distance = Vector2.Distance(rectTransform.anchoredPosition, targetSlot.anchoredPosition);
+            if (distance <= snapDistance)
+                rectTransform.anchoredPosition = targetSlot.anchoredPosition;
+            else
+                rectTransform.anchoredPosition = currentStartPosition;
+        }
 
-        // ─── ลองหา FishJigsawBoard ก่อน (ระบบปลา 3 object) ─────────────────────
+        // ─── แจ้ง manager ให้ตรวจสอบว่า puzzle สำเร็จหรือยัง ─────────────────────
         FishJigsawBoard board = GetComponentInParent<FishJigsawBoard>();
         if (board != null)
         {
-            HandleSnapWithBoard(board.allJigsawSlots, board.jigsawPieces);
             board.CheckJigsawCompletion();
             return;
         }
 
-        // ─── Fallback: FishMinigameManager (ระบบ quiz เดิม) ────────────────────
         FishMinigameManager manager = GetComponentInParent<FishMinigameManager>();
-        if (manager != null && manager.allJigsawSlots != null && manager.allJigsawSlots.Length > 0)
-        {
-            HandleSnapWithBoard(manager.allJigsawSlots, manager.jigsawPieces);
-            manager.CheckJigsawCompletion();
-            return;
-        }
-
-        // ─── Fallback สุดท้าย: snap กับ targetSlot ตรง ๆ ────────────────────────
-        float distance = Vector2.Distance(rectTransform.anchoredPosition, targetSlot.anchoredPosition);
-        if (distance <= snapDistance)
-            rectTransform.anchoredPosition = targetSlot.anchoredPosition;
-        else
-            rectTransform.anchoredPosition = currentStartPosition;
+        if (manager != null) manager.CheckJigsawCompletion();
     }
 
     /// <summary>หาช่องว่างที่ใกล้ที่สุดแล้ว snap ไป (ใช้กับทั้ง board และ manager)</summary>

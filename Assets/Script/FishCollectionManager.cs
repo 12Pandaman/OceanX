@@ -14,6 +14,8 @@ public class FishCollectionManager : MonoBehaviour
     public GameObject pressEHint;
 
     [Header("Quiz ท้ายสุด (หลังครบ 3 ตัว)")]
+    [Tooltip("สุ่มรูปปลาตอนเริ่มจิ๊กซอว์ (ถ้าเปิด จะใช้คำตอบที่ถูกต้องตาม index ที่สุ่มได้)")]
+    public bool     randomizeFinalFish   = true;
     public string   finalQuestion        = "Which fish did you find?";
     public string[] finalChoices         = { "Tuna", "Blue Tang", "Cichlid" };
     public int      finalCorrectIndex    = 0;
@@ -100,10 +102,20 @@ public class FishCollectionManager : MonoBehaviour
         if (_manager.minigameCanvas != null)
             _manager.minigameCanvas.SetActive(true);
 
-        if (_visual != null)
-            _visual.ShowFish(finalJigsawFishIndex);
+        int fishIndexToUse = finalJigsawFishIndex;
+        int correctIndexToUse = finalCorrectIndex;
 
-        _manager.StartMinigame(finalQuestion, finalChoices, finalCorrectIndex);
+        // ถ้าเปิดตั้งค่าสุ่ม ให้สุ่มเลือกรูปปลาและอัปเดตคำตอบที่ถูกต้อง
+        if (randomizeFinalFish && finalChoices.Length > 0)
+        {
+            fishIndexToUse = Random.Range(0, finalChoices.Length);
+            correctIndexToUse = fishIndexToUse; // ให้คำตอบที่ถูกตรงกับ index ของปลา
+        }
+
+        if (_visual != null)
+            _visual.ShowFish(fishIndexToUse);
+
+        _manager.StartMinigame(finalQuestion, finalChoices, correctIndexToUse);
     }
 
     void SetAllIconsLocked()
