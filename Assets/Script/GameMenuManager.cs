@@ -20,7 +20,22 @@ public class GameMenuManager : MonoBehaviour
 
     private void Start()
     {
-        if (menuPanel != null) menuPanel.SetActive(false);
+        if (menuPanel != null)
+        {
+            menuPanel.SetActive(false);
+            
+            // ออโต้ผูกปุ่ม Leave Game ในกรณีที่ลืมลากคำสั่ง OnClick ลงไปใน Inspector
+            Transform leaveBtn = menuPanel.transform.Find("Leave Button");
+            if (leaveBtn != null)
+            {
+                UnityEngine.UI.Button btn = leaveBtn.GetComponent<UnityEngine.UI.Button>();
+                if (btn != null)
+                {
+                    btn.onClick.RemoveListener(LeaveGame);
+                    btn.onClick.AddListener(LeaveGame);
+                }
+            }
+        }
     }
 
     private void Update()

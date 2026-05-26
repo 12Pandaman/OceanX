@@ -108,14 +108,20 @@ public class FishCollectionManager : MonoBehaviour
         // ถ้าเปิดตั้งค่าสุ่ม ให้สุ่มเลือกรูปปลาและอัปเดตคำตอบที่ถูกต้อง
         if (randomizeFinalFish && finalChoices.Length > 0)
         {
-            fishIndexToUse = Random.Range(0, finalChoices.Length);
+            UnityEngine.Random.InitState((int)System.DateTime.Now.Ticks);
+            fishIndexToUse = UnityEngine.Random.Range(0, finalChoices.Length);
             correctIndexToUse = fishIndexToUse; // ให้คำตอบที่ถูกตรงกับ index ของปลา
+            Debug.Log($"[FishCollection] เปิดระบบสุ่ม! สุ่มได้ปลา index ที่: {fishIndexToUse}");
+        }
+        else
+        {
+            Debug.Log($"[FishCollection] ระบบสุ่มปิดอยู่ (หรือ finalChoices ว่าง) ใช้รูป index: {fishIndexToUse}");
         }
 
         if (_visual != null)
             _visual.ShowFish(fishIndexToUse);
 
-        _manager.StartMinigame(finalQuestion, finalChoices, correctIndexToUse);
+        _manager.StartMinigame(finalQuestion, finalChoices, correctIndexToUse, fishIndexToUse);
     }
 
     void SetAllIconsLocked()

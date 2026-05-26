@@ -24,6 +24,9 @@ public class FishMinigameInteractable : MonoBehaviour
              "ต้องตรงกับ index ใน FishJigsawVisual.fishTextures[]")]
     public int fishIndex = 0;
 
+    [Header("Fish Data (New System)")]
+    public FishDataSO fishData;
+
     [Header("Press E Prompt (world-space, optional)")]
     [Tooltip("GameObject ที่มีข้อความ 'Press E' ลอยอยู่เหนือปลา — ถ้าไม่มีก็ไม่ต้องใส่")]
     public GameObject worldPressEPrompt;
@@ -38,7 +41,8 @@ public class FishMinigameInteractable : MonoBehaviour
 
     // player ที่อยู่ในระยะ (เฉพาะ owner เท่านั้น)
     private FishCollectionManager nearbyManager = null;
-    // ลบออกหรือเชื่อมต่อกับระบบ ServerRpc ทีหลังถ้าต้องการ sync การเก็บแบบ global
+    private bool alreadyCollectedByAll = false; // ถ้าต้องการ disable หลัง collect ครั้งแรก
+    private bool isPanelOpen = false;
 
     // ──────────────────────────────────────────────────────────────────────
     // Unity Lifecycle
@@ -57,7 +61,54 @@ public class FishMinigameInteractable : MonoBehaviour
         if (nearbyManager == null) return;
         if (!Input.GetKeyDown(KeyCode.E)) return;
 
-        TryCollect(nearbyManager);
+        FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
+        if (minigameMgr == null) return;
+
+        if (!isPanelOpen)
+        {
+            // เปิด Panel ข้อมูลปลา
+            if (fishData != null)
+            {
+                minigameMgr.ShowFishInfo(fishData.fishHeader, fishData.fishName, fishData.fishInfo);
+            }
+            else
+            {
+                minigameMgr.ShowFishInfo("No Header", "Unknown", "No Data Available");
+            }
+            isPanelOpen = true;
+
+            // หยุดปลาไม่ให้ว่ายหนี
+            NetworkFish netFish = GetComponent<NetworkFish>();
+            if (netFish != null) netFish.isPaused = true;
+
+            // ซ่อน "Press E" ไปก่อน
+            if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
+            nearbyManager.ShowPressEHint(false);
+        }
+        else
+        {
+            // ปิด Panel ข้อมูลปลา
+            minigameMgr.HideFishInfo();
+            isPanelOpen = false;
+
+            // ให้ปลากลับมาว่ายต่อ
+            NetworkFish netFish = GetComponent<NetworkFish>();
+            if (netFish != null) netFish.isPaused = false;
+
+            // พอกดปิดให้ถือว่าเป็นการ "เก็บ" ด้วยเลย ถ้ายังไม่ได้เก็บ
+            if (!nearbyManager.IsCollected(fishIndex))
+            {
+                nearbyManager.CollectFish(fishIndex);
+                if (collectedEffect != null) collectedEffect.SetActive(true);
+                nearbyManager = null; // ปิดการตรวจจับเลย
+            }
+            else
+            {
+                // ถ้าเก็บไปแล้ว แต่แค่อ่านซ้ำ ก็โชว์ Press E คืนมา
+                if (worldPressEPrompt != null) worldPressEPrompt.SetActive(true);
+                nearbyManager.ShowPressEHint(true);
+            }
+        }
     }
 
     // ──────────────────────────────────────────────────────────────────────
@@ -80,13 +131,25 @@ public class FishMinigameInteractable : MonoBehaviour
         // แสดง "Press E" บน player HUD
         mgr.ShowPressEHint(true);
 
-        Debug.Log($"[FishMinigameInteractable] Player เข้าใกล้ปลา #{fishIndex} — กด E เพื่อเก็บ");
+        Debug.Log($"[FishMinigameInteractable] Player เข้าใกล้ปลา #{fishIndex} — กด E เพื่ออ่านข้อมูล");
     }
 
     void OnTriggerExit(Collider other)
     {
         FishCollectionManager mgr = GetOwnerManager(other);
         if (mgr == null || mgr != nearbyManager) return;
+
+        // ถ้าเดินออกไปให้ปิด Panel ทันที (เผื่อหลุดออกไปได้)
+        if (isPanelOpen)
+        {
+            FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
+            if (minigameMgr != null) minigameMgr.HideFishInfo();
+            isPanelOpen = false;
+
+            // ให้ปลากลับมาว่ายต่อ
+            NetworkFish netFish = GetComponent<NetworkFish>();
+            if (netFish != null) netFish.isPaused = false;
+        }
 
         nearbyManager = null;
 

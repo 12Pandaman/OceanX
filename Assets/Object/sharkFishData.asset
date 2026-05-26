@@ -1,0 +1,18 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 442e14338b4d8554092274e954058a87, type: 3}
+  m_Name: sharkFishData
+  m_EditorClassIdentifier: 
+  fishVisualPrefab: {fileID: 5661367391037406349, guid: 345b2dc1de0b9844cad0ef4444b969de, type: 3}
+  fishHeader: 
+  fishName: Shark
+  fishInfo: None

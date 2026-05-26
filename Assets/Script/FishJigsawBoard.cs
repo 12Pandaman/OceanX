@@ -96,8 +96,13 @@ public class FishJigsawBoard : MonoBehaviour
         jigsawPieces   = new JigsawPiece[total];
         puzzleComplete = false;
         
+        // รีเซ็ต Seed การสุ่มเพื่อให้แน่ใจว่าระบบสุ่มทำงานใหม่ทุกรอบ
+        UnityEngine.Random.InitState((int)System.DateTime.Now.Ticks);
+
         // สุ่มเลือกรูปปลาจาก Array
-        Texture2D selectedTexture = fishTextures[Random.Range(0, fishTextures.Length)];
+        int randomIndex = UnityEngine.Random.Range(0, fishTextures.Length);
+        Texture2D selectedTexture = fishTextures[randomIndex];
+        Debug.Log($"[FishJigsawBoard] '{name}' : สุ่มได้รูปที่ {randomIndex} (จากทั้งหมด {fishTextures.Length} รูป)");
 
         // คำนวณ offset เพื่อ center grid
         Vector2 gridOffset = new Vector2(

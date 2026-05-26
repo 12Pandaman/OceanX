@@ -11,12 +11,21 @@ public class FishMinigameManager : MonoBehaviour
     public GameObject minigameCanvas;
     public GameObject quizPanel;
     public GameObject jigsawPanel;
+    public GameObject victoryPanel;
+
+    [Header("Victory Elements")]
+    public TMP_Text victoryTimeText;
+    public Button victoryRestartButton;
+
+    [Header("Minigame Timer")]
+    public TMP_Text currentTimerText;
 
     [Header("Quiz Elements")]
     public TMP_Text questionText;
     public Button[] choiceButtons;
     public TMP_Text[] choiceTexts;
     public TMP_Text feedbackText;
+    public RawImage quizJigsawImage;
 
     [Header("Jigsaw Elements")]
     [Tooltip("ถ้าว่างจะ auto-detect จาก JigsawPanel")]
@@ -25,16 +34,31 @@ public class FishMinigameManager : MonoBehaviour
     public RectTransform[] allJigsawSlots;
     [Tooltip("ถ้าว่างจะ auto-detect ปุ่มชื่อ 'submit' หรือ 'next'")]
     public Button nextButton;
+    [Tooltip("ถ้าว่างจะ auto-detect ปุ่มชื่อ 'leave', 'close', หรือ 'exit'")]
+    public Button leaveButton;
     public float jigsawScatterRadius = 200f;
+
+    [Header("Fish Info Panel")]
+    public GameObject fishInfoPanel;
+    public TMP_Text fishInfoHeaderText;
+    public TMP_Text fishInfoNameText;
+    public TMP_Text fishInfoDetailText;
 
     private string currentCorrectAnswer;
     private bool isTransitioningToQuiz = false;
     private int wrongAnswerCount = 0;
+    private FishJigsawVisual jigsawVisual;
+    private int currentFishIndex;
+    
+    private float minigameTimer = 0f;
+    private bool isTimerStopped = true;
 
     private void Awake()
     {
         if (quizPanel != null)   quizPanel.SetActive(false);
         if (jigsawPanel != null) jigsawPanel.SetActive(false);
+        if (quizJigsawImage != null) quizJigsawImage.gameObject.SetActive(false);
+        if (victoryPanel != null) victoryPanel.SetActive(false);
 
         AutoDetectJigsawComponents();
 
@@ -42,6 +66,27 @@ public class FishMinigameManager : MonoBehaviour
         {
             nextButton.onClick.RemoveAllListeners();
             nextButton.onClick.AddListener(OnNextButtonClicked);
+        }
+
+        if (victoryRestartButton != null)
+        {
+            victoryRestartButton.onClick.RemoveAllListeners();
+            victoryRestartButton.onClick.AddListener(RestartGame);
+        }
+    }
+
+    private void Update()
+    {
+        if (IsMinigamePlaying && !isTimerStopped)
+        {
+            minigameTimer += Time.deltaTime;
+            
+            if (currentTimerText != null)
+            {
+                int minutes = Mathf.FloorToInt(minigameTimer / 60F);
+                int seconds = Mathf.FloorToInt(minigameTimer - minutes * 60);
+                currentTimerText.text = $"{minutes:00}:{seconds:00}";
+            }
         }
     }
 
@@ -82,31 +127,66 @@ public class FishMinigameManager : MonoBehaviour
                 Debug.LogWarning("[FishMinigameManager] ไม่พบ Slot ใต้ JigsawPanel — ตั้งชื่อ child ให้ขึ้นต้นด้วย 'Slot'");
         }
 
+        jigsawVisual = GetComponentInChildren<FishJigsawVisual>(true);
+        if (jigsawVisual == null)
+            Debug.LogWarning("[FishMinigameManager] ไม่พบ FishJigsawVisual — รูปจิ๊กซอว์ในหน้า Quiz จะไม่แสดง");
+
         // ── Auto-detect nextButton (ชื่อ submit / next) ───────────────────
-        if (nextButton == null)
+        Button[] allButtons = minigameCanvas != null 
+            ? minigameCanvas.GetComponentsInChildren<Button>(true) 
+            : GetComponentsInChildren<Button>(true);
+            
+        foreach (var btn in allButtons)
         {
-            // หาจาก parent ทั้งหมด (submit อาจอยู่นอก jigsawPanel)
-            Button[] allButtons = GetComponentsInChildren<Button>(true);
-            foreach (var btn in allButtons)
+            string n = btn.name.ToLower();
+            if (nextButton == null && (n.Contains("submit") || n.Contains("next")))
+            {
+                nextButton = btn;
+                Debug.Log($"[FishMinigameManager] Auto-detect nextButton: '{btn.name}'");
+            }
+            if (leaveButton == null && (n.Contains("leave") || n.Contains("close") || n.Contains("exit") || n.Contains("quit")))
+            {
+                leaveButton = btn;
+                Debug.Log($"[FishMinigameManager] Auto-detect leaveButton: '{btn.name}'");
+            }
+        }
+
+        if (nextButton == null)
+            Debug.LogWarning("[FishMinigameManager] ไม่พบปุ่ม submit/next — ตั้งชื่อปุ่มให้มีคำว่า 'submit' หรือ 'next'");
+
+        // ── Auto-detect victoryRestartButton ───────────────────
+        if (victoryRestartButton == null && victoryPanel != null)
+        {
+            Button[] vicButtons = victoryPanel.GetComponentsInChildren<Button>(true);
+            foreach (var btn in vicButtons)
             {
                 string n = btn.name.ToLower();
-                if (n.Contains("submit") || n.Contains("next"))
+                if (n.Contains("restart") || n.Contains("play") || n.Contains("leave") || n.Contains("exit") || n.Contains("home"))
                 {
-                    nextButton = btn;
-                    Debug.Log($"[FishMinigameManager] Auto-detect nextButton: '{btn.name}'");
+                    victoryRestartButton = btn;
+                    Debug.Log($"[FishMinigameManager] Auto-detect victoryRestartButton: '{btn.name}'");
                     break;
                 }
             }
-            if (nextButton == null)
-                Debug.LogWarning("[FishMinigameManager] ไม่พบปุ่ม submit/next — ตั้งชื่อปุ่มให้มีคำว่า 'submit' หรือ 'next'");
+        }
+
+        if (leaveButton != null)
+        {
+            leaveButton.onClick.RemoveAllListeners();
+            leaveButton.onClick.AddListener(CloseMinigame);
         }
     }
 
-    public void StartMinigame(string question, string[] choices, int correctIndex)
+    public void StartMinigame(string question, string[] choices, int correctIndex, int fishIndex)
     {
         IsMinigamePlaying = true;
+        
+        minigameTimer = 0f; // เริ่มนับเวลาใหม่จาก 0
+        isTimerStopped = false; // สั่งให้เวลาเดิน
+
         isTransitioningToQuiz = false; // Reset transition flag
         wrongAnswerCount = 0; // Reset wrong answer count
+        this.currentFishIndex = fishIndex;
         
         if (nextButton != null) nextButton.interactable = false;
         if (feedbackText != null) feedbackText.text = "";
@@ -163,6 +243,9 @@ public class FishMinigameManager : MonoBehaviour
             }
         }
 
+        // เฟส 1: เริ่มต้นมินิเกมด้วยการเปิดหน้าจิกซอว์ขึ้นมาก่อน (เพื่อให้ชิ้นส่วนพร้อมจดจำตำแหน่งดั้งเดิมก่อนถูกสุ่ม)
+        StartJigsawPhase();
+
         // รีเซ็ตชิ้นส่วนจิกซอว์และสุ่มตำแหน่งให้กระจัดกระจาย
         if (jigsawPieces != null)
         {
@@ -176,19 +259,28 @@ public class FishMinigameManager : MonoBehaviour
             }
         }
 
-        // เฟส 1: เริ่มต้นมินิเกมด้วยการเปิดหน้าจิกซอว์ขึ้นมาก่อน
-        StartJigsawPhase();
     }
 
     private void StartJigsawPhase()
     {
         isTransitioningToQuiz = false;
         if (quizPanel != null) quizPanel.SetActive(false);
+        if (victoryPanel != null) victoryPanel.SetActive(false);
+        if (quizJigsawImage != null) quizJigsawImage.gameObject.SetActive(false);
         
         if (jigsawPanel != null) jigsawPanel.SetActive(true);
         else Debug.LogWarning("⚠️ [FishMinigame] หา 'Jigsaw Panel' ไม่เจอ! อย่าลืมลาก UI มาใส่ในสคริปต์บน Player Prefab นะครับ");
         
-        if (nextButton != null) nextButton.interactable = false;
+        if (nextButton != null) 
+        {
+            nextButton.interactable = false;
+            nextButton.gameObject.SetActive(false); // ซ่อนปุ่มไว้จนกว่าจะต่อเสร็จ
+        }
+        if (leaveButton != null)
+        {
+            leaveButton.gameObject.SetActive(true); // บังคับให้ปุ่มปรากฏ
+            leaveButton.interactable = true;        // บังคับให้ปุ่มกดได้
+        }
         if (feedbackText != null) feedbackText.text = "";
     }
 
@@ -226,14 +318,23 @@ public class FishMinigameManager : MonoBehaviour
         // ต้องมีชิ้นที่ valid อย่างน้อย 1 ชิ้น และถูกทุกชิ้น
         bool allCorrect = validPieceCount > 0 && correctCount == validPieceCount;
 
-        if (nextButton != null) nextButton.interactable = allCorrect; // เปิดปุ่ม Next เมื่อถูกหมด
 
         if (allCorrect)
         {
+            if (nextButton != null)
+            {
+                nextButton.gameObject.SetActive(true); // เปิดปุ่มเมื่อต่อเสร็จ
+                nextButton.interactable = true;
+            }
             if (feedbackText != null) feedbackText.text = "<color=green>Jigsaw Complete! Press Next.</color>";
         }
         else
         {
+            if (nextButton != null)
+            {
+                nextButton.interactable = false;
+                nextButton.gameObject.SetActive(false); // ปิดปุ่มไว้ถ้าดึงชิ้นส่วนออก
+            }
             if (feedbackText != null) feedbackText.text = $""; // ล้างข้อความถ้าดึงชิ้นส่วนออก
         }
     }
@@ -249,11 +350,27 @@ public class FishMinigameManager : MonoBehaviour
     private void StartQuizPhase()
     {
         if (jigsawPanel != null) jigsawPanel.SetActive(false);
+        if (victoryPanel != null) victoryPanel.SetActive(false);
+        
+        isTimerStopped = true; // หยุดนับเวลาเมื่อเข้าสู่หน้า Quiz
         
         if (quizPanel != null) quizPanel.SetActive(true);
         else Debug.LogWarning("⚠️ [FishMinigame] หา 'Quiz Panel' ไม่เจอ! อย่าลืมลาก UI มาใส่ในสคริปต์บน Player Prefab นะครับ");
         
         if (feedbackText != null) feedbackText.text = ""; // ล้างข้อความแจ้งเตือนที่ค้างอยู่
+
+        if (quizJigsawImage != null && jigsawVisual != null)
+        {
+            if (currentFishIndex >= 0 && currentFishIndex < jigsawVisual.fishTextures.Length)
+            {
+                quizJigsawImage.texture = jigsawVisual.fishTextures[currentFishIndex];
+                quizJigsawImage.gameObject.SetActive(true);
+            }
+            else
+            {
+                quizJigsawImage.gameObject.SetActive(false);
+            }
+        }
 
         // Re-enable buttons for the quiz
         if (choiceButtons != null)
@@ -275,7 +392,7 @@ public class FishMinigameManager : MonoBehaviour
         if (selectedChoice == currentCorrectAnswer)
         {
             if (feedbackText != null) feedbackText.text = "<color=green>Correct!</color>";
-            Invoke(nameof(CloseMinigame), 1.5f); // เฟส 3: ตอบถูกแล้ว ปิดมินิเกมได้เลย
+            Invoke(nameof(ShowVictoryPanel), 1.5f); // เฟส 3: ตอบถูกแล้ว เปิดหน้า Victory
         }
         else
         {
@@ -293,6 +410,30 @@ public class FishMinigameManager : MonoBehaviour
         }
     }
 
+    private void ShowVictoryPanel()
+    {
+        if (quizPanel != null) quizPanel.SetActive(false);
+        if (jigsawPanel != null) jigsawPanel.SetActive(false);
+        if (quizJigsawImage != null) quizJigsawImage.gameObject.SetActive(false);
+
+        if (victoryPanel != null)
+        {
+            victoryPanel.SetActive(true);
+
+            isTimerStopped = true; // หยุดเวลาให้ชัวร์อีกครั้ง
+            if (victoryTimeText != null)
+            {
+                int minutes = Mathf.FloorToInt(minigameTimer / 60F);
+                int seconds = Mathf.FloorToInt(minigameTimer - minutes * 60);
+                victoryTimeText.text = $"Time: {minutes:00}:{seconds:00}";
+            }
+        }
+        else
+        {
+            CloseMinigame(); // ถ้าไม่ได้ใส่ Victory Panel ไว้ ให้ปิดมินิเกมตามปกติ
+        }
+    }
+
     private void ReenableQuizButtons()
     {
         if (feedbackText != null) feedbackText.text = "";
@@ -304,6 +445,7 @@ public class FishMinigameManager : MonoBehaviour
 
     private void ResetToJigsawPhase()
     {
+        isTimerStopped = false; // ถ้าตอบผิดแล้วกลับมาหน้าจิ๊กซอว์ ให้เดินเวลาต่อ
         wrongAnswerCount = 0;
         if (jigsawPieces != null)
         {
@@ -322,7 +464,47 @@ public class FishMinigameManager : MonoBehaviour
     public void CloseMinigame()
     {
         IsMinigamePlaying = false;
+        isTimerStopped = true;
         if (quizPanel != null) quizPanel.SetActive(false);
         if (jigsawPanel != null) jigsawPanel.SetActive(false);
+        if (minigameCanvas != null) minigameCanvas.SetActive(false); // ปิด Canvas หลักทิ้ง เพื่อไม่ให้พื้นหลังค้าง
+        if (quizJigsawImage != null) quizJigsawImage.gameObject.SetActive(false);
+        if (victoryPanel != null) victoryPanel.SetActive(false);
+    }
+
+    public void ShowFishInfo(string header, string fishName, string info)
+    {
+        if (fishInfoPanel != null) fishInfoPanel.SetActive(true);
+        if (fishInfoHeaderText != null) fishInfoHeaderText.text = header;
+        if (fishInfoNameText != null) fishInfoNameText.text = fishName;
+        if (fishInfoDetailText != null) fishInfoDetailText.text = info;
+        
+        // ปลดล็อคเมาส์เผื่อว่าในหน้าต่างนี้มีปุ่มให้คลิก
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+    }
+
+    public void HideFishInfo()
+    {
+        if (fishInfoPanel != null) fishInfoPanel.SetActive(false);
+        // เมื่อหน้าต่างปิด เมาส์จะถูกล็อคกลับไปโดย MainPlayerScript (LateUpdate) โดยอัตโนมัติ
+    }
+
+    public void RestartGame()
+    {
+        // ปลดเมาส์ก่อนเพื่อป้องกันเมาส์หาย
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        // ตัดการเชื่อมต่อและรีโหลดฉาก (เหมือนกด Leave Game กลับไปหน้าแรก)
+        if (GameMenuManager.Instance != null)
+        {
+            GameMenuManager.Instance.LeaveGame(); 
+        }
+        else
+        {
+            if (Unity.Netcode.NetworkManager.Singleton != null) Unity.Netcode.NetworkManager.Singleton.Shutdown();
+            UnityEngine.SceneManagement.SceneManager.LoadScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene().buildIndex);
+        }
     }
 }

@@ -28,16 +28,16 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         canvasGroup = GetComponent<CanvasGroup>();
         if (canvasGroup == null) canvasGroup = gameObject.AddComponent<CanvasGroup>();
         parentCanvas = GetComponentInParent<Canvas>();
-    }
 
-    private void Start()
-    {
         if (rectTransform != null)
         {
             originalPosition = rectTransform.anchoredPosition;
             currentStartPosition = originalPosition;
         }
+    }
 
+    private void Start()
+    {
         // Auto-detect targetSlot จาก sibling ถ้ายังไม่ได้ set ใน Inspector
         // (ใน Hierarchy: Slot 1, Piece1, Slot 2, Piece2 ... → sibling บนเสมอคือ slot ของมัน)
         if (targetSlot == null)
@@ -74,74 +74,47 @@ public class JigsawPiece : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndD
         canvasGroup.alpha = 1f;
         canvasGroup.blocksRaycasts = true;
 
-        // ─── snap เฉพาะ targetSlot ของตัวเอง ────────────────────────────────────
-        // ไม่ snap ไปช่องอื่น เพื่อให้ CheckJigsawCompletion ทำงานถูกต้อง
-        if (targetSlot == null)
+        FishJigsawBoard board = GetComponentInParent<FishJigsawBoard>();
+        FishMinigameManager manager = GetComponentInParent<FishMinigameManager>();
+
+        RectTransform[] allSlots = null;
+        if (board != null) allSlots = board.allJigsawSlots;
+        else if (manager != null) allSlots = manager.allJigsawSlots;
+
+        // ─── หาช่องที่ใกล้ที่สุด เพื่อให้วางตรงไหนก็ได้ ─────────────────────────
+        if (allSlots != null && allSlots.Length > 0)
         {
-            rectTransform.anchoredPosition = currentStartPosition;
+            RectTransform closestSlot = null;
+            float minDistance = float.MaxValue;
+
+            foreach (var slot in allSlots)
+            {
+                if (slot == null) continue;
+                float dist = Vector2.Distance(rectTransform.anchoredPosition, slot.anchoredPosition);
+                if (dist < minDistance)
+                {
+                    minDistance = dist;
+                    closestSlot = slot;
+                }
+            }
+
+            if (closestSlot != null && minDistance <= snapDistance)
+                rectTransform.anchoredPosition = closestSlot.anchoredPosition;
+            else
+                rectTransform.anchoredPosition = currentStartPosition;
         }
         else
         {
-            float distance = Vector2.Distance(rectTransform.anchoredPosition, targetSlot.anchoredPosition);
-            if (distance <= snapDistance)
+            // Fallback (ถ้าไม่ได้รวม array slots ไว้)
+            if (targetSlot != null && Vector2.Distance(rectTransform.anchoredPosition, targetSlot.anchoredPosition) <= snapDistance)
                 rectTransform.anchoredPosition = targetSlot.anchoredPosition;
             else
                 rectTransform.anchoredPosition = currentStartPosition;
         }
 
-        // ─── แจ้ง manager ให้ตรวจสอบว่า puzzle สำเร็จหรือยัง ─────────────────────
-        FishJigsawBoard board = GetComponentInParent<FishJigsawBoard>();
-        if (board != null)
-        {
-            board.CheckJigsawCompletion();
-            return;
-        }
-
-        FishMinigameManager manager = GetComponentInParent<FishMinigameManager>();
+        // ─── แจ้งตรวจสอบว่า puzzle สำเร็จหรือยัง ─────────────────────
+        if (board != null) board.CheckJigsawCompletion();
         if (manager != null) manager.CheckJigsawCompletion();
-    }
-
-    /// <summary>หาช่องว่างที่ใกล้ที่สุดแล้ว snap ไป (ใช้กับทั้ง board และ manager)</summary>
-    private void HandleSnapWithBoard(RectTransform[] slots, JigsawPiece[] pieces)
-    {
-        if (slots == null || slots.Length == 0) return;
-
-        RectTransform closestSlot = null;
-        float minDistance = float.MaxValue;
-
-        foreach (var slot in slots)
-        {
-            if (slot == null) continue;
-
-            // เช็คว่ามีชิ้นส่วนอื่นวางอยู่แล้วหรือเปล่า
-            bool isOccupied = false;
-            if (pieces != null)
-            {
-                foreach (var other in pieces)
-                {
-                    if (other == null || other == this) continue;
-                    RectTransform otherRect = other.GetComponent<RectTransform>();
-                    if (otherRect != null && Vector2.Distance(otherRect.anchoredPosition, slot.anchoredPosition) < 5f)
-                    {
-                        isOccupied = true;
-                        break;
-                    }
-                }
-            }
-            if (isOccupied) continue;
-
-            float dist = Vector2.Distance(rectTransform.anchoredPosition, slot.anchoredPosition);
-            if (dist < minDistance)
-            {
-                minDistance = dist;
-                closestSlot = slot;
-            }
-        }
-
-        if (closestSlot != null && minDistance <= snapDistance)
-            rectTransform.anchoredPosition = closestSlot.anchoredPosition;
-        else
-            rectTransform.anchoredPosition = currentStartPosition;
     }
 
     public void ResetPiece()
