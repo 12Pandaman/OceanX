@@ -183,7 +183,7 @@ public class ConnectionManager : MonoBehaviour
     // ═════════════════════════════════════════════
     
     /// <summary>ปุ่ม Test: เล่นแบบ Offline (Local Host) ไม่ผ่าน Server/Relay เข้าเกมทันที</summary>
-    public void OnTestLocalButtonClicked()
+    public async void OnTestLocalButtonClicked()
     {
         _isLeaving = false;
         
@@ -194,6 +194,13 @@ public class ConnectionManager : MonoBehaviour
         if (loginPanel != null) loginPanel.SetActive(false);
         SetError("Starting local test...", Color.yellow);
         
+        // ป้องกันบัค Port 7777 ค้างจากการรัน Play/Stop ครั้งก่อนหน้า
+        if (NetworkManager.Singleton.IsListening || NetworkManager.Singleton.IsHost || NetworkManager.Singleton.IsClient)
+        {
+            NetworkManager.Singleton.Shutdown();
+            await Task.Delay(100); // รอเวลาเล็กน้อยให้ระบบคืน Port 7777 กลับมา
+        }
+
         _startAsHost = true;
         _hostCharIndex = 0; // เริ่มเป็น Survivor ตัวแรก
         SetConnectionData(LocalUsername, _hostCharIndex);
