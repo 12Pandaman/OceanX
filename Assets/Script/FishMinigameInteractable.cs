@@ -82,15 +82,24 @@ public class FishMinigameInteractable : MonoBehaviour
 
         if (!Input.GetKeyDown(KeyCode.E)) return;
 
-        FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
-        if (minigameMgr == null) return;
-
-        // ตรวจสอบสถานะการเก็บปลา ณ ตอนที่กด E ครั้งแรก
-        // (ถ้ากด E ครั้งแรกเพื่อเปิด panel, wasCollectedBeforeInteraction จะถูกตั้งค่าใน OnTriggerEnter)
-
         if (!isPanelOpen)
         {
+            // เก็บปลาก่อนเพื่อตรวจสอบว่าเป็นตัวสุดท้ายหรือไม่
+            nearbyManager.CollectFish(fishIndex);
+
+            // ถ้าเป็นปลาตัวสุดท้ายที่เพิ่งเก็บ ไม่ต้องเปิด panel แต่ให้รอเดินออกจากพื้นที่
+            if (!wasCollectedBeforeInteraction && nearbyManager.AreAllFishCollected())
+            {
+                Debug.Log($"[FishMinigameInteractable] Collected final fish #{fishIndex}. Minigame will start on exit.");
+                if (collectedEffect != null) collectedEffect.SetActive(true);
+                if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
+                nearbyManager.ShowPressEHint(false);
+                return; // ไม่ต้องทำอะไรต่อ รอ OnTriggerExit
+            }
+
             // เปิด Panel ข้อมูลปลา
+            FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
+            if (minigameMgr == null) return;
             if (fishData != null)
             {
                 minigameMgr.ShowFishInfo(fishData.fishHeader, fishData.fishName, fishData.fishInfo);
@@ -101,17 +110,13 @@ public class FishMinigameInteractable : MonoBehaviour
             }
             isPanelOpen = true;
 
-            // เก็บปลาทันทีที่เปิด Panel (ถ้ายังไม่เคยเก็บ)
-            nearbyManager.CollectFish(fishIndex);
             // แสดง effect การเก็บทันที (ถ้ายังไม่เคยแสดง)
             if (!wasCollectedBeforeInteraction && collectedEffect != null)
                 collectedEffect.SetActive(true);
 
-            // หยุดปลาไม่ให้ว่ายหนี
             NetworkFish netFish = GetComponent<NetworkFish>();
             if (netFish != null) netFish.isPaused = true;
 
-            // ซ่อน "Press E" ไปก่อน
             if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
             nearbyManager.ShowPressEHint(false);
 
@@ -119,37 +124,22 @@ public class FishMinigameInteractable : MonoBehaviour
         }
         else
         {
-            // ปิด Panel ข้อมูลปลา
+            FishMinigameManager minigameMgr = nearbyManager.GetComponent<FishMinigameManager>();
+            if (minigameMgr == null) return;
             minigameMgr.HideFishInfo();
             isPanelOpen = false;
 
-            // ให้ปลากลับมาว่ายต่อ
             NetworkFish netFish = GetComponent<NetworkFish>();
             if (netFish != null) netFish.isPaused = false;
 
-            // ตรวจสอบว่าปลาครบ 3 ตัวหรือยัง *หลังจาก* ปิด panel
-            // และปลาตัวนี้คือตัวที่เพิ่งเก็บไป (ไม่ใช่การอ่านซ้ำ)
-            if (!wasCollectedBeforeInteraction && nearbyManager.AreAllFishCollected())
+            if (!wasCollectedBeforeInteraction)
             {
-                // ถ้าใช่, ให้เริ่มมินิเกมสุดท้าย
-                Debug.Log($"[FishMinigameInteractable] Closed info for fish #{fishIndex}. All fish collected. Starting final minigame.");
-                nearbyManager.StartFinalMinigame();
-                // ไม่ต้องทำอะไรต่อ เพราะ minigame manager จะ take over
+                nearbyManager = null;
             }
             else
             {
-                // ถ้ายังไม่ครบ 3 ตัว หรือเป็นการอ่านข้อมูลซ้ำ
-                if (!wasCollectedBeforeInteraction)
-                {
-                    // ปลาตัวนี้เพิ่งถูกเก็บ (แต่ยังไม่ครบ 3) -> หยุดการโต้ตอบ
-                    nearbyManager = null;
-                }
-                else
-                {
-                    // อ่านข้อมูลซ้ำ -> แสดง "Press E" คืนมา
-                    if (worldPressEPrompt != null) worldPressEPrompt.SetActive(true);
-                    nearbyManager.ShowPressEHint(true);
-                }
+                if (worldPressEPrompt != null) worldPressEPrompt.SetActive(true);
+                nearbyManager.ShowPressEHint(true);
             }
         }
     }
@@ -193,6 +183,17 @@ public class FishMinigameInteractable : MonoBehaviour
     {
         FishCollectionManager mgr = GetOwnerManager(other);
         if (mgr == null || mgr != nearbyManager) return;
+
+        // ถ้าผู้เล่นเก็บปลาตัวสุดท้ายแล้วเดินออก ให้เริ่มมินิเกมทันที
+        if (!wasCollectedBeforeInteraction && mgr.AreAllFishCollected())
+        {
+            Debug.Log($"[FishMinigameInteractable] Player left final fish area. Starting final minigame.");
+            mgr.StartFinalMinigame();
+            nearbyManager = null;
+            if (worldPressEPrompt != null) worldPressEPrompt.SetActive(false);
+            mgr.ShowPressEHint(false);
+            return;
+        }
 
         // ถ้าเดินออกไปให้ปิด Panel ทันที (เผื่อหลุดออกไปได้)
         if (isPanelOpen)
